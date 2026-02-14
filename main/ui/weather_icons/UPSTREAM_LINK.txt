@@ -1,0 +1,3 @@
+﻿Weather icons source:
+https://github.com/basmilius/weather-icons
+Please check upstream repository for license/attribution details.

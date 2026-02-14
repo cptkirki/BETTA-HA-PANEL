@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Smart86 HA Panel Editor</title>
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <div class="shell">
+    <aside class="sidebar">
+      <header class="sidebar-header">
+        <h1>Smart86 Editor</h1>
+        <p>Layout source of truth: JSON</p>
+      </header>
+
+      <div class="mode-tabs">
+        <button id="layoutTabBtn" class="btn tab active">Layout</button>
+        <button id="settingsTabBtn" class="btn tab">Settings</button>
+      </div>
+
+      <div id="layoutPane" class="pane">
+        <section id="pagesSection" class="panel-section collapsible">
+          <div class="section-head">
+            <h2>Pages</h2>
+            <div class="row">
+              <button id="addPageBtn" class="btn small">+ Page</button>
+              <button id="deletePageBtn" class="btn small danger">Delete</button>
+              <button id="togglePagesSection" class="btn small collapse-toggle" type="button" aria-expanded="true"
+                aria-controls="pagesSectionBody">-</button>
+            </div>
+          </div>
+          <div id="pagesSectionBody" class="section-body">
+            <ul id="pagesList" class="list"></ul>
+            <div class="form" style="margin-top: 8px;">
+              <label>Page Title
+                <input id="pageTitleInput" type="text" placeholder="Page name on display" />
+              </label>
+              <button id="applyPageBtn" class="btn">Apply Page Name</button>
+            </div>
+          </div>
+          <div id="pagesMiniList" class="section-mini"></div>
+        </section>
+
+        <section id="widgetsSection" class="panel-section collapsible">
+          <div class="section-head">
+            <h2>Widgets</h2>
+            <button id="toggleWidgetsSection" class="btn small collapse-toggle" type="button" aria-expanded="true"
+              aria-controls="widgetsSectionBody">-</button>
+          </div>
+          <div id="widgetsSectionBody" class="section-body">
+            <div class="row">
+              <button id="addSensorBtn" class="btn small">+ Sensor</button>
+              <button id="addButtonBtn" class="btn small">+ Button</button>
+              <button id="addSliderBtn" class="btn small">+ Slider</button>
+              <button id="addGraphBtn" class="btn small">+ Graph</button>
+              <button id="addLightTileBtn" class="btn small">+ Light Tile</button>
+              <button id="addHeatingTileBtn" class="btn small">+ Heating Tile</button>
+              <button id="addWeatherTileBtn" class="btn small">+ Weather</button>
+              <button id="addWeather3DayBtn" class="btn small">+ Weather 3d</button>
+            </div>
+            <ul id="widgetsList" class="list"></ul>
+            <button id="deleteWidgetBtn" class="btn danger">Delete Widget</button>
+          </div>
+        </section>
+
+        <section id="inspectorSection" class="panel-section collapsible">
+          <div class="section-head">
+            <h2>Inspector</h2>
+            <button id="toggleInspectorSection" class="btn small collapse-toggle" type="button" aria-expanded="true"
+              aria-controls="inspectorSectionBody">-</button>
+          </div>
+          <div id="inspectorSectionBody" class="section-body">
+            <div class="form">
+              <label>Widget ID <input id="fWidgetId" type="text" /></label>
+              <label>Title <input id="fTitle" type="text" /></label>
+              <label>Type
+                <select id="fType">
+                  <option value="sensor">sensor</option>
+                  <option value="button">button</option>
+                  <option value="slider">slider</option>
+                  <option value="graph">graph</option>
+                  <option value="light_tile">light_tile</option>
+                  <option value="heating_tile">heating_tile</option>
+                  <option value="weather_tile">weather_tile</option>
+                  <option value="weather_3day">weather_3day</option>
+                </select>
+              </label>
+              <label>Entity
+                <input id="fEntity" type="text" list="entityOptions" />
+                <datalist id="entityOptions"></datalist>
+              </label>
+              <label id="fSecondaryEntityWrap" class="hidden">Ist Entity (Sensor)
+                <input id="fSecondaryEntity" type="text" list="sensorEntityOptions" />
+                <datalist id="sensorEntityOptions"></datalist>
+              </label>
+              <div id="sliderOptions" class="slider-options hidden">
+                <label>Slider Direction
+                  <select id="fSliderDirection">
+                    <option value="auto">auto (width/height based)</option>
+                    <option value="left_to_right">left_to_right (0% -> 100%)</option>
+                    <option value="right_to_left">right_to_left (100% -> 0%)</option>
+                    <option value="bottom_to_top">bottom_to_top (0% -> 100%)</option>
+                    <option value="top_to_bottom">top_to_bottom (100% -> 0%)</option>
+                  </select>
+                </label>
+                <label>Slider Accent Color
+                  <input id="fSliderAccentColor" type="color" value="#6fe8ff" />
+                </label>
+              </div>
+              <div class="grid-2">
+                <label>X <input id="fX" type="number" /></label>
+                <label>Y <input id="fY" type="number" /></label>
+                <label>W <input id="fW" type="number" /></label>
+                <label>H <input id="fH" type="number" /></label>
+              </div>
+              <button id="applyInspectorBtn" class="btn">Apply</button>
+            </div>
+          </div>
+        </section>
+      </div>
+
+      <div id="settingsPane" class="pane hidden">
+        <section>
+          <h2>Wi-Fi</h2>
+          <div class="form">
+            <label>SSID
+              <input id="settingsWifiSsid" type="text" placeholder="MyWiFi" maxlength="32" />
+            </label>
+            <div class="row">
+              <button id="scanWifiBtn" class="btn small" type="button">Scan Wi-Fi</button>
+              <select id="settingsWifiScanResults">
+                <option value="">No scan yet</option>
+              </select>
+            </div>
+            <div id="settingsWifiScanInfo" class="meta">Click "Scan Wi-Fi" to list nearby networks.</div>
+            <label>Password
+              <input id="settingsWifiPassword" type="password" placeholder="Leave empty to keep existing password" maxlength="64" />
+            </label>
+            <div id="settingsWifiInfo" class="meta"></div>
+          </div>
+        </section>
+
+        <section>
+          <h2>Home Assistant</h2>
+          <div class="form">
+            <label>WebSocket URL (ws:// or wss://)
+              <input id="settingsHaUrl" type="text" placeholder="wss://homeassistant.local:8123/api/websocket" maxlength="255" />
+            </label>
+            <label>Long-lived Access Token
+              <textarea id="settingsHaToken" placeholder="Leave empty to keep existing token" maxlength="511"></textarea>
+            </label>
+            <div id="settingsHaInfo" class="meta"></div>
+          </div>
+        </section>
+
+        <section>
+          <h2>Time</h2>
+          <div class="form">
+            <label>NTP Server
+              <input id="settingsNtpServer" type="text" placeholder="pool.ntp.org" maxlength="127" />
+            </label>
+            <label>Timezone (POSIX TZ)
+              <input id="settingsTimezone" type="text" placeholder="CET-1CEST,M3.5.0/2,M10.5.0/3" maxlength="127" />
+            </label>
+            <div id="settingsTimeInfo" class="meta"></div>
+          </div>
+        </section>
+
+        <section>
+          <h2>Setup AP</h2>
+          <div id="settingsApInfo" class="meta"></div>
+          <div class="meta">If setup AP is active, connect to it and open <code>http://192.168.4.1</code>.</div>
+        </section>
+
+        <section>
+          <h2>Settings Actions</h2>
+          <div class="row">
+            <button id="reloadSettingsBtn" class="btn">Reload Settings</button>
+            <button id="saveSettingsBtn" class="btn primary">Save + Reboot</button>
+          </div>
+          <div class="meta">After save, the device reboots and may switch from setup AP to your home Wi-Fi.</div>
+        </section>
+      </div>
+    </aside>
+
+    <main class="workspace">
+      <div class="workspace-top">
+        <h2 id="canvasTitle">Canvas</h2>
+        <div id="status" class="status">Idle</div>
+      </div>
+      <div class="workspace-body">
+        <div class="canvas-wrap">
+          <div id="canvas" class="canvas"></div>
+        </div>
+        <aside class="actions-panel">
+          <section class="panel-section">
+            <h2>Actions</h2>
+            <div class="row">
+              <button id="reloadBtn" class="btn">Reload</button>
+              <button id="saveBtn" class="btn primary">Save</button>
+              <button id="exportBtn" class="btn">Export</button>
+            </div>
+            <div class="row">
+              <button id="importBtn" class="btn">Import JSON</button>
+              <input id="importFile" type="file" accept="application/json" />
+            </div>
+            <textarea id="jsonPaste" placeholder="Paste layout JSON here"></textarea>
+          </section>
+        </aside>
+      </div>
+    </main>
+  </div>
+  <script src="/app.js"></script>
+</body>
+</html>
