@@ -1,0 +1,118 @@
+menu "Example Configuration"
+
+menu "Wi-Fi Station"
+
+config APP_WIFI_SSID
+    string "Wi-Fi SSID"
+    default "YOUR_WIFI_SSID"
+    help
+        SSID of your access point.
+        ESP32-C6 supports 2.4 GHz Wi-Fi.
+
+config APP_WIFI_PASSWORD
+    string "Wi-Fi Password"
+    default "YOUR_WIFI_PASSWORD"
+    help
+        Password for your access point.
+        Set empty only for open networks.
+
+config APP_WIFI_WAIT_FOR_IP
+    bool "Wait for IP before continuing boot"
+    default y
+    help
+        If enabled, startup waits until station got IP or timeout.
+
+config APP_WIFI_CONNECT_TIMEOUT_MS
+    int "Wi-Fi connect timeout (ms)"
+    range 1000 120000
+    default 15000
+    help
+        Maximum time to wait for IP when wait-for-IP is enabled.
+
+config APP_WIFI_MAX_RETRIES
+    int "Wi-Fi max reconnect retries"
+    range 1 100
+    default 8
+    help
+        Number of reconnect attempts after disconnect.
+
+config APP_WIFI_DISABLE_POWER_SAVE
+    bool "Disable Wi-Fi power save (WIFI_PS_NONE)"
+    default y
+    help
+        Forces Wi-Fi modem power-save off on the hosted C6 via esp_wifi_set_ps(WIFI_PS_NONE).
+        Recommended for maximum websocket stability.
+
+endmenu
+
+menu "ESP-Hosted"
+
+config APP_HOSTED_AUTO_UPDATE_C6_FW
+    bool "Auto-update C6 firmware on version mismatch"
+    default y
+    depends on ESP_HOSTED_ENABLED
+    help
+        If enabled, the host compares the running ESP32-C6 firmware version
+        with the ESP-Hosted host stack version and performs a slave OTA update
+        when they differ. After successful OTA, the host reboots to resync.
+
+endmenu
+
+menu "Home Assistant"
+
+config APP_HA_WS_URL
+    string "HA WebSocket URL"
+    default "YOUR_HA_WS_URL"
+    help
+        Example: wss://homeassistant.local:8123/api/websocket
+
+config APP_HA_ACCESS_TOKEN
+    string "HA Long-lived Access Token"
+    default "YOUR_HA_ACCESS_TOKEN"
+    help
+        Long-lived access token used for Home Assistant authentication.
+
+config APP_HA_FETCH_INITIAL_STATES
+    bool "Fetch initial states after auth_ok"
+    default y
+    help
+        When enabled, the device sends Home Assistant get_states right after
+        websocket authentication. This can be memory-intensive on constrained
+        links; keep disabled for maximum runtime stability.
+
+config APP_HA_SUBSCRIBE_STATE_CHANGED
+    bool "Subscribe to HA state_changed event stream"
+    default y
+    help
+        Enables global Home Assistant state_changed subscription.
+        This can produce high event volume; keep disabled while focusing
+        on transport stability, then enable once stable.
+
+config APP_HA_PING_INTERVAL_MS
+    int "HA ping interval (ms)"
+    range 5000 120000
+    default 8000
+    help
+        Periodic Home Assistant websocket "ping" message interval.
+        Keeps the application session active even during long idle periods.
+
+endmenu
+
+menu "Time"
+
+config APP_NTP_SERVER
+    string "NTP server"
+    default "pool.ntp.org"
+    help
+        NTP server used for time synchronization.
+
+config APP_TIME_TZ
+    string "Timezone (POSIX TZ)"
+    default "CET-1CEST,M3.5.0/2,M10.5.0/3"
+    help
+        POSIX timezone string used for localtime conversion.
+        Default is Europe/Berlin with automatic DST switching.
+
+endmenu
+
+endmenu
