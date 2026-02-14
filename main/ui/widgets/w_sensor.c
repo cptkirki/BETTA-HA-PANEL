@@ -210,7 +210,7 @@ static void sensor_age_timer_cb(lv_timer_t *timer)
     if (timer == NULL) {
         return;
     }
-    w_sensor_ctx_t *ctx = (w_sensor_ctx_t *)timer->user_data;
+    w_sensor_ctx_t *ctx = (w_sensor_ctx_t *)lv_timer_get_user_data(timer);
     if (ctx == NULL) {
         return;
     }
