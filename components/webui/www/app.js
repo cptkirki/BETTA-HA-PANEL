@@ -4,6 +4,12 @@ const CANVAS_HEIGHT = 600;
 const MIN_WIDGET_SIZE = 60;
 const DEFAULT_SLIDER_DIRECTION = "auto";
 const DEFAULT_SLIDER_ACCENT_COLOR = "#6fe8ff";
+const DEFAULT_GRAPH_LINE_COLOR = "#6fe8ff";
+const DEFAULT_GRAPH_TIME_WINDOW_MIN = 120;
+const GRAPH_POINTS_MIN = 16;
+const GRAPH_POINTS_MAX = 64;
+const GRAPH_TIME_WINDOW_MIN = 1;
+const GRAPH_TIME_WINDOW_MAX = 1440;
 const SLIDER_DIRECTIONS = new Set([
   "auto",
   "left_to_right",
@@ -26,7 +32,7 @@ function widgetSizeLimits(type) {
     case "button":
       return { minW: 180, minH: 120, maxW: 480, maxH: 320 };
     case "slider":
-      return { minW: 180, minH: 100, maxW: CANVAS_WIDTH, maxH: CANVAS_HEIGHT };
+      return { minW: MIN_WIDGET_SIZE, minH: MIN_WIDGET_SIZE, maxW: CANVAS_WIDTH, maxH: CANVAS_HEIGHT };
     case "graph":
       return { minW: 220, minH: 140, maxW: CANVAS_WIDTH, maxH: CANVAS_HEIGHT };
     case "light_tile":
@@ -121,6 +127,10 @@ const el = {
   sliderOptions: document.getElementById("sliderOptions"),
   fSliderDirection: document.getElementById("fSliderDirection"),
   fSliderAccentColor: document.getElementById("fSliderAccentColor"),
+  graphOptions: document.getElementById("graphOptions"),
+  fGraphLineColor: document.getElementById("fGraphLineColor"),
+  fGraphTimeWindowMin: document.getElementById("fGraphTimeWindowMin"),
+  fGraphPointCount: document.getElementById("fGraphPointCount"),
   fX: document.getElementById("fX"),
   fY: document.getElementById("fY"),
   fW: document.getElementById("fW"),
@@ -168,6 +178,26 @@ function normalizeHexColor(value, fallback = DEFAULT_SLIDER_ACCENT_COLOR) {
   return fallbackNorm;
 }
 
+function normalizeGraphPointCount(value) {
+  if (value === null || value === undefined) return 0;
+  if (typeof value === "string" && value.trim() === "") return 0;
+
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return 0;
+
+  const rounded = Math.round(parsed);
+  if (rounded <= 0) return 0;
+  return clamp(rounded, GRAPH_POINTS_MIN, GRAPH_POINTS_MAX);
+}
+
+function normalizeGraphTimeWindowMin(value) {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return DEFAULT_GRAPH_TIME_WINDOW_MIN;
+  const rounded = Math.round(parsed);
+  if (rounded <= 0) return DEFAULT_GRAPH_TIME_WINDOW_MIN;
+  return clamp(rounded, GRAPH_TIME_WINDOW_MIN, GRAPH_TIME_WINDOW_MAX);
+}
+
 function normalizeLayoutWidgets(layout) {
   if (!layout || !Array.isArray(layout.pages)) return;
   for (const page of layout.pages) {
@@ -177,6 +207,16 @@ function normalizeLayoutWidgets(layout) {
       if (widget.type === "slider") {
         widget.slider_direction = normalizeSliderDirection(widget.slider_direction);
         widget.slider_accent_color = normalizeHexColor(widget.slider_accent_color, DEFAULT_SLIDER_ACCENT_COLOR);
+      }
+      if (widget.type === "graph") {
+        widget.graph_line_color = normalizeHexColor(widget.graph_line_color, DEFAULT_GRAPH_LINE_COLOR);
+        widget.graph_time_window_min = normalizeGraphTimeWindowMin(widget.graph_time_window_min);
+        const normalizedGraphPoints = normalizeGraphPointCount(widget.graph_point_count);
+        if (normalizedGraphPoints > 0) {
+          widget.graph_point_count = normalizedGraphPoints;
+        } else {
+          delete widget.graph_point_count;
+        }
       }
     }
   }
@@ -814,11 +854,23 @@ function renderInspector() {
     if (el.sliderOptions) {
       el.sliderOptions.classList.add("hidden");
     }
+    if (el.graphOptions) {
+      el.graphOptions.classList.add("hidden");
+    }
     if (el.fSliderDirection) {
       el.fSliderDirection.value = DEFAULT_SLIDER_DIRECTION;
     }
     if (el.fSliderAccentColor) {
       el.fSliderAccentColor.value = DEFAULT_SLIDER_ACCENT_COLOR;
+    }
+    if (el.fGraphLineColor) {
+      el.fGraphLineColor.value = DEFAULT_GRAPH_LINE_COLOR;
+    }
+    if (el.fGraphTimeWindowMin) {
+      el.fGraphTimeWindowMin.value = String(DEFAULT_GRAPH_TIME_WINDOW_MIN);
+    }
+    if (el.fGraphPointCount) {
+      el.fGraphPointCount.value = "";
     }
     renderEntityOptions();
     return;
@@ -834,8 +886,12 @@ function renderInspector() {
   el.fH.value = widget.rect.h;
 
   const isSlider = widget.type === "slider";
+  const isGraph = widget.type === "graph";
   if (el.sliderOptions) {
     el.sliderOptions.classList.toggle("hidden", !isSlider);
+  }
+  if (el.graphOptions) {
+    el.graphOptions.classList.toggle("hidden", !isGraph);
   }
   if (isSlider) {
     const direction = normalizeSliderDirection(widget.slider_direction);
@@ -854,6 +910,37 @@ function renderInspector() {
     }
     if (el.fSliderAccentColor) {
       el.fSliderAccentColor.value = DEFAULT_SLIDER_ACCENT_COLOR;
+    }
+  }
+  if (isGraph) {
+    const lineColor = normalizeHexColor(widget.graph_line_color, DEFAULT_GRAPH_LINE_COLOR);
+    const timeWindowMin = normalizeGraphTimeWindowMin(widget.graph_time_window_min);
+    const pointCount = normalizeGraphPointCount(widget.graph_point_count);
+    widget.graph_line_color = lineColor;
+    widget.graph_time_window_min = timeWindowMin;
+    if (pointCount > 0) {
+      widget.graph_point_count = pointCount;
+    } else {
+      delete widget.graph_point_count;
+    }
+    if (el.fGraphLineColor) {
+      el.fGraphLineColor.value = lineColor;
+    }
+    if (el.fGraphTimeWindowMin) {
+      el.fGraphTimeWindowMin.value = String(widget.graph_time_window_min);
+    }
+    if (el.fGraphPointCount) {
+      el.fGraphPointCount.value = pointCount > 0 ? String(pointCount) : "";
+    }
+  } else {
+    if (el.fGraphLineColor) {
+      el.fGraphLineColor.value = DEFAULT_GRAPH_LINE_COLOR;
+    }
+    if (el.fGraphTimeWindowMin) {
+      el.fGraphTimeWindowMin.value = String(DEFAULT_GRAPH_TIME_WINDOW_MIN);
+    }
+    if (el.fGraphPointCount) {
+      el.fGraphPointCount.value = "";
     }
   }
 
@@ -925,6 +1012,10 @@ function addWidget(type) {
     widget.slider_direction = DEFAULT_SLIDER_DIRECTION;
     widget.slider_accent_color = DEFAULT_SLIDER_ACCENT_COLOR;
   }
+  if (type === "graph") {
+    widget.graph_line_color = DEFAULT_GRAPH_LINE_COLOR;
+    widget.graph_time_window_min = DEFAULT_GRAPH_TIME_WINDOW_MIN;
+  }
 
   page.widgets.push(widget);
   editor.selectedWidgetId = id;
@@ -965,6 +1056,20 @@ function applyInspector() {
   } else {
     delete widget.slider_direction;
     delete widget.slider_accent_color;
+  }
+  if (widget.type === "graph") {
+    widget.graph_line_color = normalizeHexColor(el.fGraphLineColor?.value, DEFAULT_GRAPH_LINE_COLOR);
+    widget.graph_time_window_min = normalizeGraphTimeWindowMin(el.fGraphTimeWindowMin?.value);
+    const graphPointCount = normalizeGraphPointCount(el.fGraphPointCount?.value);
+    if (graphPointCount > 0) {
+      widget.graph_point_count = graphPointCount;
+    } else {
+      delete widget.graph_point_count;
+    }
+  } else {
+    delete widget.graph_line_color;
+    delete widget.graph_time_window_min;
+    delete widget.graph_point_count;
   }
   widget.rect = clampRectToCanvas(
     {
@@ -1055,12 +1160,37 @@ function bindUi() {
     if (el.sliderOptions) {
       el.sliderOptions.classList.toggle("hidden", el.fType.value !== "slider");
     }
+    if (el.graphOptions) {
+      el.graphOptions.classList.toggle("hidden", el.fType.value !== "graph");
+    }
     if (el.fType.value === "slider") {
       if (el.fSliderDirection) {
         el.fSliderDirection.value = normalizeSliderDirection(el.fSliderDirection.value);
       }
       if (el.fSliderAccentColor) {
         el.fSliderAccentColor.value = normalizeHexColor(el.fSliderAccentColor.value, DEFAULT_SLIDER_ACCENT_COLOR);
+      }
+    }
+    if (el.fType.value === "graph") {
+      if (el.fGraphLineColor) {
+        el.fGraphLineColor.value = normalizeHexColor(el.fGraphLineColor.value, DEFAULT_GRAPH_LINE_COLOR);
+      }
+      if (el.fGraphTimeWindowMin) {
+        el.fGraphTimeWindowMin.value = String(normalizeGraphTimeWindowMin(el.fGraphTimeWindowMin.value));
+      }
+      if (el.fGraphPointCount) {
+        const normalizedGraphPoints = normalizeGraphPointCount(el.fGraphPointCount.value);
+        el.fGraphPointCount.value = normalizedGraphPoints > 0 ? String(normalizedGraphPoints) : "";
+      }
+    } else {
+      if (el.fGraphLineColor) {
+        el.fGraphLineColor.value = DEFAULT_GRAPH_LINE_COLOR;
+      }
+      if (el.fGraphTimeWindowMin) {
+        el.fGraphTimeWindowMin.value = String(DEFAULT_GRAPH_TIME_WINDOW_MIN);
+      }
+      if (el.fGraphPointCount) {
+        el.fGraphPointCount.value = "";
       }
     }
     renderEntityOptions();

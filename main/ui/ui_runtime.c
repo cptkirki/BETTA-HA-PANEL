@@ -62,8 +62,8 @@ static ui_widget_size_limits_t ui_runtime_widget_size_limits(const char *type)
         limits.max_w = 480;
         limits.max_h = 320;
     } else if (strcmp(type, "slider") == 0) {
-        limits.min_w = 180;
-        limits.min_h = 100;
+        limits.min_w = 60;
+        limits.min_h = 60;
     } else if (strcmp(type, "graph") == 0) {
         limits.min_w = 220;
         limits.min_h = 140;
@@ -249,6 +249,9 @@ static bool ui_runtime_widget_from_json(cJSON *widget_json, ui_widget_def_t *out
     cJSON *secondary_entity_id = cJSON_GetObjectItemCaseSensitive(widget_json, "secondary_entity_id");
     cJSON *slider_direction = cJSON_GetObjectItemCaseSensitive(widget_json, "slider_direction");
     cJSON *slider_accent_color = cJSON_GetObjectItemCaseSensitive(widget_json, "slider_accent_color");
+    cJSON *graph_line_color = cJSON_GetObjectItemCaseSensitive(widget_json, "graph_line_color");
+    cJSON *graph_point_count = cJSON_GetObjectItemCaseSensitive(widget_json, "graph_point_count");
+    cJSON *graph_time_window_min = cJSON_GetObjectItemCaseSensitive(widget_json, "graph_time_window_min");
     cJSON *rect = cJSON_GetObjectItemCaseSensitive(widget_json, "rect");
     if (!cJSON_IsString(id) || !cJSON_IsString(type) || !cJSON_IsString(entity_id) || !cJSON_IsObject(rect)) {
         return false;
@@ -275,6 +278,15 @@ static bool ui_runtime_widget_from_json(cJSON *widget_json, ui_widget_def_t *out
     }
     if (cJSON_IsString(slider_accent_color) && slider_accent_color->valuestring != NULL) {
         snprintf(out->slider_accent_color, sizeof(out->slider_accent_color), "%s", slider_accent_color->valuestring);
+    }
+    if (cJSON_IsString(graph_line_color) && graph_line_color->valuestring != NULL) {
+        snprintf(out->graph_line_color, sizeof(out->graph_line_color), "%s", graph_line_color->valuestring);
+    }
+    if (cJSON_IsNumber(graph_point_count)) {
+        out->graph_point_count = graph_point_count->valueint;
+    }
+    if (cJSON_IsNumber(graph_time_window_min)) {
+        out->graph_time_window_min = graph_time_window_min->valueint;
     }
     out->x = x->valueint;
     out->y = y->valueint;

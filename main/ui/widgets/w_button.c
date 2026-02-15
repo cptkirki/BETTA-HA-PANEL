@@ -8,23 +8,21 @@
 #include "ui/theme/theme_default.h"
 #include "ui/ui_bindings.h"
 
-#if LV_FONT_MONTSERRAT_34
-#define BUTTON_ACTION_ICON_FONT (&lv_font_montserrat_34)
-#elif LV_FONT_MONTSERRAT_28
-#define BUTTON_ACTION_ICON_FONT (&lv_font_montserrat_28)
-#elif LV_FONT_MONTSERRAT_24
-#define BUTTON_ACTION_ICON_FONT (&lv_font_montserrat_24)
-#else
-#define BUTTON_ACTION_ICON_FONT LV_FONT_DEFAULT
-#endif
-
 typedef struct {
     char entity_id[APP_MAX_ENTITY_ID_LEN];
+    lv_obj_t *card;
     lv_obj_t *title_label;
     lv_obj_t *state_label;
-    lv_obj_t *action_surface;
-    lv_obj_t *action_icon;
+    lv_obj_t *action_switch;
+    bool suppress_event;
+    bool is_on;
+    bool unavailable;
 } w_button_ctx_t;
+
+static const uint32_t W_BUTTON_SWITCH_TRACK_OFF_HEX = 0x3A3E43;
+static const uint32_t W_BUTTON_SWITCH_TRACK_ON_HEX = APP_UI_COLOR_NAV_TAB_ACTIVE;
+static const uint32_t W_BUTTON_SWITCH_KNOB_HEX = 0xEAF2FA;
+static const lv_coord_t W_BUTTON_SWITCH_HEIGHT_PX = 40;
 
 static bool state_is_on(const char *state)
 {
@@ -35,23 +33,29 @@ static bool state_is_on(const char *state)
            (strcmp(state, "home") == 0);
 }
 
-static void w_button_event_cb(lv_event_t *event)
+static void button_set_switch_checked(w_button_ctx_t *ctx, bool checked)
 {
-    lv_event_code_t code = lv_event_get_code(event);
-    w_button_ctx_t *ctx = (w_button_ctx_t *)lv_event_get_user_data(event);
-    if (ctx == NULL) {
+    if (ctx == NULL || ctx->action_switch == NULL) {
         return;
     }
-    if (code == LV_EVENT_CLICKED) {
-        ui_bindings_toggle_entity(ctx->entity_id);
-    } else if (code == LV_EVENT_DELETE) {
-        free(ctx);
+
+    bool current = lv_obj_has_state(ctx->action_switch, LV_STATE_CHECKED);
+    if (current == checked) {
+        return;
     }
+
+    ctx->suppress_event = true;
+    if (checked) {
+        lv_obj_add_state(ctx->action_switch, LV_STATE_CHECKED);
+    } else {
+        lv_obj_clear_state(ctx->action_switch, LV_STATE_CHECKED);
+    }
+    ctx->suppress_event = false;
 }
 
-static void button_layout_action_surface(lv_obj_t *card, w_button_ctx_t *ctx)
+static void button_layout_switch(lv_obj_t *card, w_button_ctx_t *ctx)
 {
-    if (card == NULL || ctx == NULL || ctx->title_label == NULL || ctx->state_label == NULL || ctx->action_surface == NULL) {
+    if (card == NULL || ctx == NULL || ctx->title_label == NULL || ctx->state_label == NULL || ctx->action_switch == NULL) {
         return;
     }
 
@@ -75,15 +79,12 @@ static void button_layout_action_surface(lv_obj_t *card, w_button_ctx_t *ctx)
 #else
         10;
 #endif
-    const lv_coord_t min_height = 44;
+    const lv_coord_t min_height = 34;
 
-    lv_coord_t pad_left = lv_obj_get_style_pad_left(card, LV_PART_MAIN);
-    lv_coord_t pad_right = lv_obj_get_style_pad_right(card, LV_PART_MAIN);
-    lv_coord_t pad_top = lv_obj_get_style_pad_top(card, LV_PART_MAIN);
-    lv_coord_t pad_bottom = lv_obj_get_style_pad_bottom(card, LV_PART_MAIN);
-
-    lv_coord_t content_w = lv_obj_get_width(card) - pad_left - pad_right;
-    lv_coord_t content_h = lv_obj_get_height(card) - pad_top - pad_bottom;
+    lv_coord_t content_w =
+        lv_obj_get_width(card) - lv_obj_get_style_pad_left(card, LV_PART_MAIN) - lv_obj_get_style_pad_right(card, LV_PART_MAIN);
+    lv_coord_t content_h =
+        lv_obj_get_height(card) - lv_obj_get_style_pad_top(card, LV_PART_MAIN) - lv_obj_get_style_pad_bottom(card, LV_PART_MAIN);
     if (content_w < 24) {
         content_w = 24;
     }
@@ -91,27 +92,10 @@ static void button_layout_action_surface(lv_obj_t *card, w_button_ctx_t *ctx)
         content_h = 48;
     }
 
-    lv_coord_t x = side_inset;
-    lv_coord_t width = content_w - (2 * side_inset);
-    if (width < 24) {
-        width = 24;
-    }
-
     lv_coord_t top = lv_obj_get_y(ctx->state_label) + lv_obj_get_height(ctx->state_label) + top_gap;
     lv_coord_t bottom = lv_obj_get_y(ctx->title_label) - bottom_gap;
-
     if (top < 0) {
         top = 0;
-    }
-    if (bottom > content_h) {
-        bottom = content_h;
-    }
-    if (bottom < (top + min_height)) {
-        top = bottom - min_height;
-        if (top < 0) {
-            top = 0;
-            bottom = min_height;
-        }
     }
     if (bottom > content_h) {
         bottom = content_h;
@@ -127,88 +111,147 @@ static void button_layout_action_surface(lv_obj_t *card, w_button_ctx_t *ctx)
         }
     }
 
-    lv_obj_set_pos(ctx->action_surface, x, top);
-    lv_obj_set_size(ctx->action_surface, width, bottom - top);
-    if (ctx->action_icon != NULL) {
-        lv_obj_center(ctx->action_icon);
+    lv_coord_t area_h = bottom - top;
+    if (area_h < 20) {
+        area_h = 20;
     }
+
+    lv_coord_t max_w = content_w - (2 * side_inset);
+    if (max_w < 20) {
+        max_w = content_w;
+    }
+    if (max_w < 20) {
+        max_w = 20;
+    }
+
+    lv_coord_t switch_h = (area_h < W_BUTTON_SWITCH_HEIGHT_PX) ? area_h : W_BUTTON_SWITCH_HEIGHT_PX;
+    if (switch_h < 20) {
+        switch_h = 20;
+    }
+    lv_coord_t switch_w = (switch_h * 23) / 10;
+    if (switch_w > max_w) {
+        switch_w = max_w;
+        switch_h = (switch_w * 10) / 23;
+        if (switch_h < 20) {
+            switch_h = 20;
+        }
+        if (switch_h > area_h) {
+            switch_h = area_h;
+        }
+    }
+
+    lv_coord_t x = (content_w - switch_w) / 2;
+    lv_coord_t y = top + (area_h - switch_h) / 2;
+    if (x < 0) {
+        x = 0;
+    }
+    if (y < 0) {
+        y = 0;
+    }
+
+    lv_obj_set_pos(ctx->action_switch, x, y);
+    lv_obj_set_size(ctx->action_switch, switch_w, switch_h);
 }
 
-static void button_apply_visual(lv_obj_t *card, w_button_ctx_t *ctx, bool is_on, const char *status_text)
+static void button_apply_visual(lv_obj_t *card, w_button_ctx_t *ctx, bool is_on, bool unavailable, const char *status_text)
 {
-    if (card == NULL || ctx == NULL || ctx->title_label == NULL || ctx->state_label == NULL || ctx->action_surface == NULL ||
-        ctx->action_icon == NULL) {
+    if (card == NULL || ctx == NULL || ctx->title_label == NULL || ctx->state_label == NULL || ctx->action_switch == NULL) {
         return;
     }
 
-    lv_obj_set_style_bg_color(
-        card, is_on ? lv_color_hex(APP_UI_COLOR_CARD_BG_ON) : lv_color_hex(APP_UI_COLOR_CARD_BG_OFF), LV_PART_MAIN);
+    ctx->is_on = is_on;
+    ctx->unavailable = unavailable;
+
+    const lv_color_t card_bg =
+        lv_color_hex((is_on && !unavailable) ? APP_UI_COLOR_CARD_BG_ON : APP_UI_COLOR_CARD_BG_OFF);
+    const lv_color_t state_color = unavailable
+                                       ? lv_color_hex(APP_UI_COLOR_TEXT_MUTED)
+                                       : (is_on ? lv_color_hex(APP_UI_COLOR_STATE_ON) : lv_color_hex(APP_UI_COLOR_STATE_OFF));
+    const lv_color_t track_off =
+        unavailable ? lv_color_hex(APP_UI_COLOR_CARD_BORDER) : lv_color_hex(W_BUTTON_SWITCH_TRACK_OFF_HEX);
+    const lv_color_t track_on =
+        unavailable ? lv_color_hex(APP_UI_COLOR_CARD_BORDER) : lv_color_hex(W_BUTTON_SWITCH_TRACK_ON_HEX);
+    const lv_color_t knob_color =
+        unavailable ? lv_color_hex(APP_UI_COLOR_TEXT_MUTED) : lv_color_hex(W_BUTTON_SWITCH_KNOB_HEX);
+
+    lv_obj_set_style_bg_color(card, card_bg, LV_PART_MAIN);
     lv_obj_set_style_bg_opa(card, LV_OPA_COVER, LV_PART_MAIN);
     lv_obj_set_style_text_color(ctx->title_label, lv_color_hex(APP_UI_COLOR_TEXT_PRIMARY), LV_PART_MAIN);
-    lv_obj_set_style_text_color(
-        ctx->state_label, is_on ? lv_color_hex(APP_UI_COLOR_STATE_ON) : lv_color_hex(APP_UI_COLOR_STATE_OFF), LV_PART_MAIN);
+    lv_obj_set_style_text_color(ctx->state_label, state_color, LV_PART_MAIN);
 
-    if (is_on) {
-        lv_obj_set_style_bg_color(
-            ctx->action_surface, lv_color_hex(APP_UI_COLOR_NAV_BTN_BG_ACTIVE), LV_PART_MAIN | LV_STATE_DEFAULT);
-        lv_obj_set_style_bg_grad_color(
-            ctx->action_surface, lv_color_hex(APP_UI_COLOR_NAV_BTN_BG_IDLE), LV_PART_MAIN | LV_STATE_DEFAULT);
-        lv_obj_set_style_bg_grad_dir(ctx->action_surface, LV_GRAD_DIR_VER, LV_PART_MAIN | LV_STATE_DEFAULT);
-        lv_obj_set_style_bg_opa(ctx->action_surface, LV_OPA_COVER, LV_PART_MAIN | LV_STATE_DEFAULT);
-        lv_obj_set_style_border_width(ctx->action_surface, 1, LV_PART_MAIN | LV_STATE_DEFAULT);
-        lv_obj_set_style_border_opa(ctx->action_surface, LV_OPA_80, LV_PART_MAIN | LV_STATE_DEFAULT);
-        lv_obj_set_style_border_color(
-            ctx->action_surface, lv_color_hex(APP_UI_COLOR_NAV_TAB_ACTIVE), LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_radius(ctx->action_switch, LV_RADIUS_CIRCLE, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_radius(ctx->action_switch, LV_RADIUS_CIRCLE, LV_PART_INDICATOR | LV_STATE_DEFAULT);
+    lv_obj_set_style_radius(ctx->action_switch, LV_RADIUS_CIRCLE, LV_PART_KNOB | LV_STATE_DEFAULT);
 
-        lv_obj_set_style_bg_color(
-            ctx->action_surface, lv_color_hex(APP_UI_COLOR_NAV_BTN_BG_IDLE), LV_PART_MAIN | LV_STATE_PRESSED);
-        lv_obj_set_style_bg_grad_color(
-            ctx->action_surface, lv_color_hex(APP_UI_COLOR_CARD_BG_ON), LV_PART_MAIN | LV_STATE_PRESSED);
-        lv_obj_set_style_bg_grad_dir(ctx->action_surface, LV_GRAD_DIR_VER, LV_PART_MAIN | LV_STATE_PRESSED);
-        lv_obj_set_style_bg_opa(ctx->action_surface, LV_OPA_COVER, LV_PART_MAIN | LV_STATE_PRESSED);
-        lv_obj_set_style_border_width(ctx->action_surface, 1, LV_PART_MAIN | LV_STATE_PRESSED);
-        lv_obj_set_style_border_opa(ctx->action_surface, LV_OPA_80, LV_PART_MAIN | LV_STATE_PRESSED);
-        lv_obj_set_style_border_color(
-            ctx->action_surface, lv_color_hex(APP_UI_COLOR_NAV_HOME_ACTIVE), LV_PART_MAIN | LV_STATE_PRESSED);
+    lv_obj_set_style_bg_color(ctx->action_switch, track_off, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_bg_opa(ctx->action_switch, LV_OPA_COVER, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_border_width(ctx->action_switch, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_pad_all(ctx->action_switch, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_clip_corner(ctx->action_switch, true, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_anim_duration(ctx->action_switch, 140, LV_PART_MAIN | LV_STATE_DEFAULT);
+
+    lv_obj_set_style_bg_color(ctx->action_switch, track_off, LV_PART_INDICATOR | LV_STATE_DEFAULT);
+    lv_obj_set_style_bg_opa(ctx->action_switch, LV_OPA_COVER, LV_PART_INDICATOR | LV_STATE_DEFAULT);
+    lv_obj_set_style_border_width(ctx->action_switch, 0, LV_PART_INDICATOR | LV_STATE_DEFAULT);
+    lv_obj_set_style_bg_color(ctx->action_switch, track_on, LV_PART_INDICATOR | LV_STATE_CHECKED);
+    lv_obj_set_style_bg_opa(ctx->action_switch, LV_OPA_COVER, LV_PART_INDICATOR | LV_STATE_CHECKED);
+
+    lv_obj_set_style_bg_color(ctx->action_switch, knob_color, LV_PART_KNOB | LV_STATE_DEFAULT);
+    lv_obj_set_style_bg_opa(ctx->action_switch, LV_OPA_COVER, LV_PART_KNOB | LV_STATE_DEFAULT);
+    lv_obj_set_style_border_width(ctx->action_switch, 0, LV_PART_KNOB | LV_STATE_DEFAULT);
+    lv_obj_set_style_pad_all(ctx->action_switch, 0, LV_PART_KNOB | LV_STATE_DEFAULT);
+
+    if (unavailable) {
+        lv_obj_add_state(ctx->action_switch, LV_STATE_DISABLED);
     } else {
-        /* Keep OFF state flat: one solid fill color without depth gradient. */
-        lv_obj_set_style_bg_color(
-            ctx->action_surface, lv_color_hex(APP_UI_COLOR_CONTENT_BG), LV_PART_MAIN | LV_STATE_DEFAULT);
-        lv_obj_set_style_bg_grad_color(
-            ctx->action_surface, lv_color_hex(APP_UI_COLOR_CONTENT_BG), LV_PART_MAIN | LV_STATE_DEFAULT);
-        lv_obj_set_style_bg_grad_dir(ctx->action_surface, LV_GRAD_DIR_NONE, LV_PART_MAIN | LV_STATE_DEFAULT);
-        lv_obj_set_style_bg_opa(ctx->action_surface, LV_OPA_COVER, LV_PART_MAIN | LV_STATE_DEFAULT);
-        lv_obj_set_style_border_width(ctx->action_surface, 1, LV_PART_MAIN | LV_STATE_DEFAULT);
-        lv_obj_set_style_border_opa(ctx->action_surface, LV_OPA_80, LV_PART_MAIN | LV_STATE_DEFAULT);
-        lv_obj_set_style_border_color(
-            ctx->action_surface, lv_color_hex(APP_UI_COLOR_CARD_BORDER), LV_PART_MAIN | LV_STATE_DEFAULT);
-
-        lv_obj_set_style_bg_color(
-            ctx->action_surface, lv_color_hex(APP_UI_COLOR_CONTENT_BG), LV_PART_MAIN | LV_STATE_PRESSED);
-        lv_obj_set_style_bg_grad_color(
-            ctx->action_surface, lv_color_hex(APP_UI_COLOR_CONTENT_BG), LV_PART_MAIN | LV_STATE_PRESSED);
-        lv_obj_set_style_bg_grad_dir(ctx->action_surface, LV_GRAD_DIR_NONE, LV_PART_MAIN | LV_STATE_PRESSED);
-        lv_obj_set_style_bg_opa(ctx->action_surface, LV_OPA_COVER, LV_PART_MAIN | LV_STATE_PRESSED);
-        lv_obj_set_style_border_width(ctx->action_surface, 1, LV_PART_MAIN | LV_STATE_PRESSED);
-        lv_obj_set_style_border_opa(ctx->action_surface, LV_OPA_80, LV_PART_MAIN | LV_STATE_PRESSED);
-        lv_obj_set_style_border_color(
-            ctx->action_surface, lv_color_hex(APP_UI_COLOR_CARD_BORDER), LV_PART_MAIN | LV_STATE_PRESSED);
+        lv_obj_clear_state(ctx->action_switch, LV_STATE_DISABLED);
     }
-
-    lv_obj_set_style_radius(ctx->action_surface, APP_UI_CARD_RADIUS - 6, LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_radius(ctx->action_surface, APP_UI_CARD_RADIUS - 6, LV_PART_MAIN | LV_STATE_PRESSED);
-    lv_obj_set_style_pad_all(ctx->action_surface, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_pad_all(ctx->action_surface, 0, LV_PART_MAIN | LV_STATE_PRESSED);
-
-    lv_obj_set_style_text_font(ctx->action_icon, BUTTON_ACTION_ICON_FONT, LV_PART_MAIN);
-    lv_obj_set_style_text_color(
-        ctx->action_icon,
-        is_on ? lv_color_hex(APP_UI_COLOR_NAV_TAB_ACTIVE) : lv_color_hex(APP_UI_COLOR_TEXT_SOFT),
-        LV_PART_MAIN);
-    lv_label_set_text(ctx->action_icon, LV_SYMBOL_POWER);
+    button_set_switch_checked(ctx, is_on && !unavailable);
 
     lv_label_set_text(ctx->state_label, status_text != NULL ? status_text : (is_on ? "ON" : "OFF"));
-    button_layout_action_surface(card, ctx);
+    button_layout_switch(card, ctx);
+}
+
+static void w_button_card_event_cb(lv_event_t *event)
+{
+    lv_event_code_t code = lv_event_get_code(event);
+    w_button_ctx_t *ctx = (w_button_ctx_t *)lv_event_get_user_data(event);
+    if (ctx == NULL) {
+        return;
+    }
+
+    if (code == LV_EVENT_CLICKED) {
+        if (ctx->unavailable) {
+            return;
+        }
+        bool next = !ctx->is_on;
+        button_apply_visual(ctx->card, ctx, next, false, next ? "ON" : "OFF");
+        ui_bindings_toggle_entity(ctx->entity_id);
+    } else if (code == LV_EVENT_DELETE) {
+        free(ctx);
+    }
+}
+
+static void w_button_switch_event_cb(lv_event_t *event)
+{
+    lv_event_code_t code = lv_event_get_code(event);
+    if (code != LV_EVENT_VALUE_CHANGED) {
+        return;
+    }
+
+    w_button_ctx_t *ctx = (w_button_ctx_t *)lv_event_get_user_data(event);
+    if (ctx == NULL || ctx->suppress_event || ctx->unavailable) {
+        return;
+    }
+
+    lv_obj_t *sw = lv_event_get_target(event);
+    if (sw == NULL) {
+        return;
+    }
+
+    bool checked = lv_obj_has_state(sw, LV_STATE_CHECKED);
+    button_apply_visual(ctx->card, ctx, checked, false, checked ? "ON" : "OFF");
+    ui_bindings_toggle_entity(ctx->entity_id);
 }
 
 esp_err_t w_button_create(const ui_widget_def_t *def, lv_obj_t *parent, ui_widget_instance_t *out_instance)
@@ -251,18 +294,10 @@ esp_err_t w_button_create(const ui_widget_def_t *def, lv_obj_t *parent, ui_widge
     lv_obj_align(state_label, LV_ALIGN_TOP_LEFT, 0, 0);
 #endif
 
-    lv_obj_t *action_surface = lv_obj_create(card);
-    lv_obj_remove_style_all(action_surface);
-    lv_obj_set_size(action_surface, def->w - 36, def->h - 88);
-    lv_obj_add_flag(action_surface, LV_OBJ_FLAG_CLICKABLE);
-    lv_obj_clear_flag(action_surface, LV_OBJ_FLAG_SCROLLABLE);
-    lv_obj_clear_flag(action_surface, LV_OBJ_FLAG_EVENT_BUBBLE);
-
-    lv_obj_t *action_icon = lv_label_create(action_surface);
-    lv_label_set_text(action_icon, LV_SYMBOL_POWER);
-    lv_obj_set_style_text_font(action_icon, BUTTON_ACTION_ICON_FONT, LV_PART_MAIN);
-    lv_obj_set_style_text_align(action_icon, LV_TEXT_ALIGN_CENTER, LV_PART_MAIN);
-    lv_obj_center(action_icon);
+    lv_obj_t *action_switch = lv_switch_create(card);
+    lv_obj_clear_flag(action_switch, LV_OBJ_FLAG_EVENT_BUBBLE);
+    lv_obj_set_size(action_switch, 88, 40);
+    lv_switch_set_orientation(action_switch, LV_SWITCH_ORIENTATION_HORIZONTAL);
 
     w_button_ctx_t *ctx = calloc(1, sizeof(w_button_ctx_t));
     if (ctx == NULL) {
@@ -270,16 +305,19 @@ esp_err_t w_button_create(const ui_widget_def_t *def, lv_obj_t *parent, ui_widge
         return ESP_ERR_NO_MEM;
     }
     snprintf(ctx->entity_id, sizeof(ctx->entity_id), "%s", def->entity_id);
+    ctx->card = card;
     ctx->title_label = title;
     ctx->state_label = state_label;
-    ctx->action_surface = action_surface;
-    ctx->action_icon = action_icon;
+    ctx->action_switch = action_switch;
+    ctx->suppress_event = false;
+    ctx->is_on = false;
+    ctx->unavailable = false;
 
-    lv_obj_add_event_cb(card, w_button_event_cb, LV_EVENT_CLICKED, ctx);
-    lv_obj_add_event_cb(card, w_button_event_cb, LV_EVENT_DELETE, ctx);
-    lv_obj_add_event_cb(action_surface, w_button_event_cb, LV_EVENT_CLICKED, ctx);
+    lv_obj_add_event_cb(card, w_button_card_event_cb, LV_EVENT_CLICKED, ctx);
+    lv_obj_add_event_cb(card, w_button_card_event_cb, LV_EVENT_DELETE, ctx);
+    lv_obj_add_event_cb(action_switch, w_button_switch_event_cb, LV_EVENT_VALUE_CHANGED, ctx);
 
-    button_apply_visual(card, ctx, false, "OFF");
+    button_apply_visual(card, ctx, false, false, "OFF");
     out_instance->obj = card;
     out_instance->ctx = ctx;
     return ESP_OK;
@@ -291,9 +329,13 @@ void w_button_apply_state(ui_widget_instance_t *instance, const ha_state_t *stat
         return;
     }
 
-    const bool is_on = state_is_on(state->state);
     w_button_ctx_t *ctx = (w_button_ctx_t *)instance->ctx;
-    button_apply_visual(instance->obj, ctx, is_on, is_on ? "ON" : "OFF");
+    if (ctx == NULL) {
+        return;
+    }
+
+    const bool is_on = state_is_on(state->state);
+    button_apply_visual(instance->obj, ctx, is_on, false, is_on ? "ON" : "OFF");
 }
 
 void w_button_mark_unavailable(ui_widget_instance_t *instance)
@@ -301,6 +343,11 @@ void w_button_mark_unavailable(ui_widget_instance_t *instance)
     if (instance == NULL || instance->obj == NULL) {
         return;
     }
+
     w_button_ctx_t *ctx = (w_button_ctx_t *)instance->ctx;
-    button_apply_visual(instance->obj, ctx, false, "unavailable");
+    if (ctx == NULL) {
+        return;
+    }
+
+    button_apply_visual(instance->obj, ctx, false, true, "unavailable");
 }

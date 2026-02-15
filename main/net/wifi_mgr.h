@@ -31,6 +31,7 @@ typedef struct {
 esp_err_t wifi_mgr_init(const wifi_mgr_config_t *cfg);
 bool wifi_mgr_is_connected(void);
 esp_err_t wifi_mgr_force_reconnect(void);
+esp_err_t wifi_mgr_force_transport_recover(void);
 esp_err_t wifi_mgr_start_setup_ap(const wifi_mgr_ap_config_t *cfg);
 esp_err_t wifi_mgr_stop_setup_ap(void);
 bool wifi_mgr_is_setup_ap_active(void);

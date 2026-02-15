@@ -16,6 +16,9 @@ typedef struct {
     char secondary_entity_id[APP_MAX_ENTITY_ID_LEN];
     char slider_direction[APP_MAX_UI_OPTION_LEN];
     char slider_accent_color[APP_MAX_COLOR_STR_LEN];
+    char graph_line_color[APP_MAX_COLOR_STR_LEN];
+    int graph_point_count;
+    int graph_time_window_min;
     int x;
     int y;
     int w;
@@ -30,6 +33,9 @@ typedef struct {
     char secondary_entity_id[APP_MAX_ENTITY_ID_LEN];
     char slider_direction[APP_MAX_UI_OPTION_LEN];
     char slider_accent_color[APP_MAX_COLOR_STR_LEN];
+    char graph_line_color[APP_MAX_COLOR_STR_LEN];
+    int graph_point_count;
+    int graph_time_window_min;
     void *ctx;
     lv_obj_t *obj;
 } ui_widget_instance_t;

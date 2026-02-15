@@ -10,6 +10,11 @@
 
 #include "app_config.h"
 
+#define GRAPH_POINT_COUNT_MIN 16
+#define GRAPH_POINT_COUNT_MAX 64
+#define GRAPH_TIME_WINDOW_MIN_MIN 1
+#define GRAPH_TIME_WINDOW_MIN_MAX 1440
+
 static bool str_in_list(const char *value, const void *list, size_t entry_size, size_t list_len)
 {
     if (value == NULL || list == NULL || entry_size == 0) {
@@ -250,6 +255,9 @@ static bool validate_widget(cJSON *widget, const char *known_widget_ids, size_t 
     cJSON *secondary_entity_id = cJSON_GetObjectItemCaseSensitive(widget, "secondary_entity_id");
     cJSON *slider_direction = cJSON_GetObjectItemCaseSensitive(widget, "slider_direction");
     cJSON *slider_accent_color = cJSON_GetObjectItemCaseSensitive(widget, "slider_accent_color");
+    cJSON *graph_line_color = cJSON_GetObjectItemCaseSensitive(widget, "graph_line_color");
+    cJSON *graph_point_count = cJSON_GetObjectItemCaseSensitive(widget, "graph_point_count");
+    cJSON *graph_time_window_min = cJSON_GetObjectItemCaseSensitive(widget, "graph_time_window_min");
     cJSON *rect = cJSON_GetObjectItemCaseSensitive(widget, "rect");
 
     if (!cJSON_IsString(id) || id->valuestring == NULL || strlen(id->valuestring) == 0U) {
@@ -318,6 +326,43 @@ static bool validate_widget(cJSON *widget, const char *known_widget_ids, size_t 
                 !is_valid_hex_rgb_color(slider_accent_color->valuestring)) {
                 snprintf(msg, sizeof(msg), "widget %s: slider_accent_color must be hex RGB",
                     cJSON_IsString(id) ? id->valuestring : "?");
+                layout_validation_add(result, msg);
+            }
+        }
+    }
+
+    if (cJSON_IsString(type) && type->valuestring != NULL && strcmp(type->valuestring, "graph") == 0) {
+        if (graph_line_color != NULL) {
+            if (!cJSON_IsString(graph_line_color) || graph_line_color->valuestring == NULL ||
+                !is_valid_hex_rgb_color(graph_line_color->valuestring)) {
+                snprintf(msg, sizeof(msg), "widget %s: graph_line_color must be hex RGB",
+                    cJSON_IsString(id) ? id->valuestring : "?");
+                layout_validation_add(result, msg);
+            }
+        }
+
+        if (graph_point_count != NULL) {
+            if (!cJSON_IsNumber(graph_point_count) ||
+                graph_point_count->valuedouble < (double)GRAPH_POINT_COUNT_MIN ||
+                graph_point_count->valuedouble > (double)GRAPH_POINT_COUNT_MAX ||
+                (double)graph_point_count->valueint != graph_point_count->valuedouble) {
+                snprintf(msg, sizeof(msg), "widget %s: graph_point_count must be integer %d..%d",
+                    cJSON_IsString(id) ? id->valuestring : "?",
+                    GRAPH_POINT_COUNT_MIN,
+                    GRAPH_POINT_COUNT_MAX);
+                layout_validation_add(result, msg);
+            }
+        }
+
+        if (graph_time_window_min != NULL) {
+            if (!cJSON_IsNumber(graph_time_window_min) ||
+                graph_time_window_min->valuedouble < (double)GRAPH_TIME_WINDOW_MIN_MIN ||
+                graph_time_window_min->valuedouble > (double)GRAPH_TIME_WINDOW_MIN_MAX ||
+                (double)graph_time_window_min->valueint != graph_time_window_min->valuedouble) {
+                snprintf(msg, sizeof(msg), "widget %s: graph_time_window_min must be integer %d..%d",
+                    cJSON_IsString(id) ? id->valuestring : "?",
+                    GRAPH_TIME_WINDOW_MIN_MIN,
+                    GRAPH_TIME_WINDOW_MIN_MAX);
                 layout_validation_add(result, msg);
             }
         }

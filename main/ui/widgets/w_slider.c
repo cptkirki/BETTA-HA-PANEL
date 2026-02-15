@@ -26,8 +26,6 @@ typedef struct {
     lv_obj_t *state_label;
     lv_obj_t *value_label;
     lv_obj_t *slider;
-    lv_obj_t *fill_obj;
-    lv_obj_t *bubble_label;
     w_slider_direction_t direction_cfg;
     w_slider_direction_t direction_effective;
     lv_color_t accent_color;
@@ -36,12 +34,12 @@ typedef struct {
     bool unavailable;
     bool dragging;
     bool suppress_event;
+    int last_sent_value;
 } w_slider_ctx_t;
 
 static const uint32_t W_SLIDER_FILL_DRAG_HEX = 0xA1A5AA;
 static const uint32_t W_SLIDER_FILL_OFF_HEX = 0x8C98A4;
 static const uint32_t W_SLIDER_TRACK_HEX = 0x3A3E43;
-static const uint32_t W_SLIDER_BUBBLE_BG_HEX = 0x111722;
 
 static int clamp_percent(int value)
 {
@@ -122,6 +120,7 @@ static int slider_extract_percent_value(const ha_state_t *state, bool *out_has_n
     if (attrs != NULL) {
         cJSON *brightness_pct = cJSON_GetObjectItemCaseSensitive(attrs, "brightness_pct");
         cJSON *brightness = cJSON_GetObjectItemCaseSensitive(attrs, "brightness");
+        cJSON *volume_level = cJSON_GetObjectItemCaseSensitive(attrs, "volume_level");
         if (cJSON_IsNumber(brightness_pct)) {
             value = clamp_percent((int)(brightness_pct->valuedouble + 0.5));
             if (out_has_numeric != NULL) {
@@ -136,6 +135,18 @@ static int slider_extract_percent_value(const ha_state_t *state, bool *out_has_n
                 raw_255 = 255;
             }
             value = (raw_255 * 100 + 127) / 255;
+            if (out_has_numeric != NULL) {
+                *out_has_numeric = true;
+            }
+        } else if (cJSON_IsNumber(volume_level)) {
+            double normalized = volume_level->valuedouble;
+            if (normalized < 0.0) {
+                normalized = 0.0;
+            }
+            if (normalized > 1.0) {
+                normalized = 1.0;
+            }
+            value = clamp_percent((int)(normalized * 100.0 + 0.5));
             if (out_has_numeric != NULL) {
                 *out_has_numeric = true;
             }
@@ -236,18 +247,6 @@ static bool slider_direction_is_reversed(w_slider_direction_t direction)
     return direction == W_SLIDER_DIR_RIGHT_TO_LEFT || direction == W_SLIDER_DIR_TOP_TO_BOTTOM;
 }
 
-static int slider_model_to_display_value(w_slider_direction_t direction, int model_value)
-{
-    int clamped = clamp_percent(model_value);
-    return slider_direction_is_reversed(direction) ? (100 - clamped) : clamped;
-}
-
-static int slider_display_to_model_value(w_slider_direction_t direction, int display_value)
-{
-    int clamped = clamp_percent(display_value);
-    return slider_direction_is_reversed(direction) ? (100 - clamped) : clamped;
-}
-
 static w_slider_direction_t slider_effective_direction(const w_slider_ctx_t *ctx, lv_obj_t *card)
 {
     if (ctx == NULL) {
@@ -262,6 +261,21 @@ static w_slider_direction_t slider_effective_direction(const w_slider_ctx_t *ctx
     return W_SLIDER_DIR_LEFT_TO_RIGHT;
 }
 
+static void slider_apply_native_orientation(w_slider_ctx_t *ctx)
+{
+    if (ctx == NULL || ctx->slider == NULL) {
+        return;
+    }
+
+    const bool vertical = slider_direction_is_vertical(ctx->direction_effective);
+    const bool reversed = slider_direction_is_reversed(ctx->direction_effective);
+
+    lv_slider_set_orientation(
+        ctx->slider, vertical ? LV_SLIDER_ORIENTATION_VERTICAL : LV_SLIDER_ORIENTATION_HORIZONTAL);
+    lv_obj_set_style_base_dir(ctx->slider, LV_BASE_DIR_LTR, LV_PART_MAIN);
+    lv_slider_set_range(ctx->slider, reversed ? 100 : 0, reversed ? 0 : 100);
+}
+
 static void slider_set_value_label(lv_obj_t *label, int value)
 {
     if (label == NULL) {
@@ -270,147 +284,6 @@ static void slider_set_value_label(lv_obj_t *label, int value)
     char text[24] = {0};
     snprintf(text, sizeof(text), "%d %%", clamp_percent(value));
     lv_label_set_text(label, text);
-}
-
-static void slider_position_handle_and_bubble(lv_obj_t *card, w_slider_ctx_t *ctx)
-{
-    if (card == NULL || ctx == NULL || ctx->slider == NULL || ctx->fill_obj == NULL || ctx->bubble_label == NULL) {
-        return;
-    }
-
-    lv_obj_update_layout(card);
-    lv_obj_update_layout(ctx->slider);
-    lv_obj_update_layout(ctx->fill_obj);
-    lv_obj_update_layout(ctx->bubble_label);
-
-    lv_coord_t slider_x = lv_obj_get_x(ctx->slider);
-    lv_coord_t slider_y = lv_obj_get_y(ctx->slider);
-    lv_coord_t slider_w = lv_obj_get_width(ctx->slider);
-    lv_coord_t slider_h = lv_obj_get_height(ctx->slider);
-
-    if (slider_w < 2 || slider_h < 2) {
-        return;
-    }
-
-    const lv_coord_t inset = 2;
-    lv_coord_t track_x = inset;
-    lv_coord_t track_y = inset;
-    lv_coord_t track_w = slider_w - (2 * inset);
-    lv_coord_t track_h = slider_h - (2 * inset);
-    if (track_w < 2) {
-        track_w = slider_w;
-        track_x = 0;
-    }
-    if (track_h < 2) {
-        track_h = slider_h;
-        track_y = 0;
-    }
-
-    const int value = clamp_percent(ctx->value);
-    const bool vertical = slider_direction_is_vertical(ctx->direction_effective);
-    const bool reversed = slider_direction_is_reversed(ctx->direction_effective);
-
-    if (vertical) {
-        lv_coord_t fill_h = (lv_coord_t)((value * track_h + 50) / 100);
-        if (fill_h < 0) {
-            fill_h = 0;
-        }
-        if (fill_h > track_h) {
-            fill_h = track_h;
-        }
-        if (value > 0 && fill_h == 0) {
-            fill_h = 1;
-        }
-        if (fill_h > 0) {
-            lv_coord_t fill_y = reversed ? track_y : (track_y + track_h - fill_h);
-            lv_obj_set_pos(ctx->fill_obj, track_x, fill_y);
-            lv_obj_set_size(ctx->fill_obj, track_w, fill_h);
-            lv_obj_clear_flag(ctx->fill_obj, LV_OBJ_FLAG_HIDDEN);
-        } else {
-            lv_obj_add_flag(ctx->fill_obj, LV_OBJ_FLAG_HIDDEN);
-        }
-    } else {
-        lv_coord_t fill_w = (lv_coord_t)((value * track_w + 50) / 100);
-        if (fill_w < 0) {
-            fill_w = 0;
-        }
-        if (fill_w > track_w) {
-            fill_w = track_w;
-        }
-        if (value > 0 && fill_w == 0) {
-            fill_w = 1;
-        }
-        if (fill_w > 0) {
-            lv_coord_t fill_x = reversed ? (track_x + track_w - fill_w) : track_x;
-            lv_obj_set_pos(ctx->fill_obj, fill_x, track_y);
-            lv_obj_set_size(ctx->fill_obj, fill_w, track_h);
-            lv_obj_clear_flag(ctx->fill_obj, LV_OBJ_FLAG_HIDDEN);
-        } else {
-            lv_obj_add_flag(ctx->fill_obj, LV_OBJ_FLAG_HIDDEN);
-        }
-    }
-
-    const lv_coord_t track_len = vertical ? track_h : track_w;
-    lv_coord_t edge_offset = 0;
-    if (track_len > 1) {
-        edge_offset = (lv_coord_t)((value * (track_len - 1) + 50) / 100);
-    }
-
-    lv_coord_t handle_x = slider_x + track_x;
-    lv_coord_t handle_y = slider_y + track_y;
-    if (vertical) {
-        handle_x = slider_x + track_x + track_w / 2;
-        handle_y = reversed ? (slider_y + track_y + edge_offset) : (slider_y + track_y + track_h - 1 - edge_offset);
-    } else {
-        handle_x = reversed ? (slider_x + track_x + track_w - 1 - edge_offset) : (slider_x + track_x + edge_offset);
-        handle_y = slider_y + track_y + track_h / 2;
-    }
-
-    if (!ctx->dragging) {
-        lv_obj_add_flag(ctx->bubble_label, LV_OBJ_FLAG_HIDDEN);
-        return;
-    }
-
-    lv_obj_clear_flag(ctx->bubble_label, LV_OBJ_FLAG_HIDDEN);
-    lv_obj_update_layout(ctx->bubble_label);
-
-    lv_coord_t bubble_w = lv_obj_get_width(ctx->bubble_label);
-    lv_coord_t bubble_h = lv_obj_get_height(ctx->bubble_label);
-    lv_coord_t bubble_x = 0;
-    lv_coord_t bubble_y = 0;
-
-    if (vertical) {
-        bubble_x = handle_x - bubble_w - 10;
-        bubble_y = handle_y - (bubble_h / 2);
-    } else {
-        bubble_x = handle_x - (bubble_w / 2);
-        bubble_y = handle_y - bubble_h - 8;
-    }
-
-    lv_coord_t content_w =
-        lv_obj_get_width(card) - lv_obj_get_style_pad_left(card, LV_PART_MAIN) - lv_obj_get_style_pad_right(card, LV_PART_MAIN);
-    lv_coord_t content_h =
-        lv_obj_get_height(card) - lv_obj_get_style_pad_top(card, LV_PART_MAIN) - lv_obj_get_style_pad_bottom(card, LV_PART_MAIN);
-    if (bubble_x < 0) {
-        bubble_x = 0;
-    }
-    if (bubble_y < 0) {
-        bubble_y = 0;
-    }
-    if (bubble_x + bubble_w > content_w) {
-        bubble_x = content_w - bubble_w;
-    }
-    if (bubble_y + bubble_h > content_h) {
-        bubble_y = content_h - bubble_h;
-    }
-    if (bubble_x < 0) {
-        bubble_x = 0;
-    }
-    if (bubble_y < 0) {
-        bubble_y = 0;
-    }
-
-    lv_obj_set_pos(ctx->bubble_label, bubble_x, bubble_y);
 }
 
 static void slider_apply_layout(lv_obj_t *card, w_slider_ctx_t *ctx)
@@ -436,8 +309,8 @@ static void slider_apply_layout(lv_obj_t *card, w_slider_ctx_t *ctx)
     if (content_w < 24) {
         content_w = 24;
     }
-    if (content_h < 60) {
-        content_h = 60;
+    if (content_h < 24) {
+        content_h = 24;
     }
 
     lv_coord_t top = lv_obj_get_y(ctx->state_label) + lv_obj_get_height(ctx->state_label) + top_gap;
@@ -469,49 +342,54 @@ static void slider_apply_layout(lv_obj_t *card, w_slider_ctx_t *ctx)
     lv_coord_t slider_y = top;
     lv_coord_t slider_w = area_w;
     lv_coord_t slider_h = area_h;
+    lv_coord_t target_thickness = (content_w < content_h) ? content_w : content_h;
+    if (target_thickness < 2) {
+        target_thickness = 2;
+    }
 
     if (vertical) {
-        slider_w = (lv_coord_t)((area_w * 72) / 100);
-        if (slider_w < 56) {
-            slider_w = 56;
-        }
+        slider_w = target_thickness;
         if (slider_w > area_w) {
             slider_w = area_w;
+        }
+        if (slider_w < 2) {
+            slider_w = 2;
         }
         slider_h = area_h;
         slider_x = (area_w - slider_w) / 2;
     } else {
         slider_w = area_w;
-        slider_h = (lv_coord_t)((area_h * 72) / 100);
-        if (slider_h < 44) {
-            slider_h = 44;
-        }
+        slider_h = target_thickness;
         if (slider_h > area_h) {
             slider_h = area_h;
+        }
+        if (slider_h < 2) {
+            slider_h = 2;
         }
         slider_y = top + (area_h - slider_h) / 2;
     }
 
-    if (slider_w < 20) {
-        slider_w = 20;
-    }
-    if (slider_h < 20) {
-        slider_h = 20;
-    }
-
     lv_obj_set_pos(ctx->slider, slider_x, slider_y);
     lv_obj_set_size(ctx->slider, slider_w, slider_h);
-    lv_obj_set_style_radius(ctx->slider, LV_RADIUS_CIRCLE, LV_PART_MAIN);
-    lv_obj_set_style_radius(ctx->slider, LV_RADIUS_CIRCLE, LV_PART_INDICATOR);
-    lv_obj_set_style_radius(ctx->slider, LV_RADIUS_CIRCLE, LV_PART_KNOB);
+    lv_coord_t thickness = vertical ? slider_w : slider_h;
+    if (thickness < 2) {
+        thickness = 2;
+    }
+    lv_coord_t radius = thickness / 2;
+    if (radius < 1) {
+        radius = 1;
+    }
+    lv_obj_set_style_radius(ctx->slider, radius, LV_PART_MAIN);
+    lv_obj_set_style_radius(ctx->slider, radius, LV_PART_INDICATOR);
+    lv_obj_set_style_radius(ctx->slider, radius, LV_PART_KNOB);
 
-    slider_position_handle_and_bubble(card, ctx);
+    slider_apply_native_orientation(ctx);
 }
 
 static void slider_apply_visual(w_slider_ctx_t *ctx)
 {
     if (ctx == NULL || ctx->card == NULL || ctx->title_label == NULL || ctx->state_label == NULL ||
-        ctx->value_label == NULL || ctx->slider == NULL || ctx->fill_obj == NULL || ctx->bubble_label == NULL) {
+        ctx->value_label == NULL || ctx->slider == NULL) {
         return;
     }
 
@@ -537,47 +415,33 @@ static void slider_apply_visual(w_slider_ctx_t *ctx)
 
     lv_obj_set_style_bg_color(ctx->slider, lv_color_hex(W_SLIDER_TRACK_HEX), LV_PART_MAIN);
     lv_obj_set_style_bg_opa(ctx->slider, LV_OPA_COVER, LV_PART_MAIN);
-    lv_obj_set_style_border_width(ctx->slider, 1, LV_PART_MAIN);
-    lv_obj_set_style_border_opa(ctx->slider, LV_OPA_80, LV_PART_MAIN);
-    lv_obj_set_style_border_color(ctx->slider, lv_color_hex(APP_UI_COLOR_CARD_BORDER), LV_PART_MAIN);
+    lv_obj_set_style_border_width(ctx->slider, 0, LV_PART_MAIN);
+    lv_obj_set_style_pad_all(ctx->slider, 0, LV_PART_MAIN);
     lv_obj_set_style_clip_corner(ctx->slider, true, LV_PART_MAIN);
 
-    lv_obj_set_style_bg_opa(ctx->slider, LV_OPA_TRANSP, LV_PART_INDICATOR);
+    lv_obj_set_style_bg_color(ctx->slider, indicator_color, LV_PART_INDICATOR);
+    lv_obj_set_style_bg_opa(ctx->slider, LV_OPA_COVER, LV_PART_INDICATOR);
     lv_obj_set_style_border_width(ctx->slider, 0, LV_PART_INDICATOR);
 
-    /* Hide default knob for a flat HA-like slider surface. */
+    /* Keep native knob hit-testing but render it transparent. */
     lv_obj_set_style_bg_opa(ctx->slider, LV_OPA_TRANSP, LV_PART_KNOB);
     lv_obj_set_style_border_opa(ctx->slider, LV_OPA_TRANSP, LV_PART_KNOB);
     lv_obj_set_style_border_width(ctx->slider, 0, LV_PART_KNOB);
     lv_obj_set_style_outline_width(ctx->slider, 0, LV_PART_KNOB);
     lv_obj_set_style_shadow_width(ctx->slider, 0, LV_PART_KNOB);
+    lv_obj_set_style_pad_left(ctx->slider, 0, LV_PART_KNOB);
+    lv_obj_set_style_pad_right(ctx->slider, 0, LV_PART_KNOB);
+    lv_obj_set_style_pad_top(ctx->slider, 0, LV_PART_KNOB);
+    lv_obj_set_style_pad_bottom(ctx->slider, 0, LV_PART_KNOB);
 
-    lv_obj_set_style_bg_color(ctx->fill_obj, indicator_color, LV_PART_MAIN);
-    lv_obj_set_style_bg_opa(ctx->fill_obj, LV_OPA_COVER, LV_PART_MAIN);
-    lv_obj_set_style_border_width(ctx->fill_obj, 0, LV_PART_MAIN);
-    lv_obj_set_style_radius(ctx->fill_obj, LV_RADIUS_CIRCLE, LV_PART_MAIN);
+    slider_apply_layout(card, ctx);
 
-    lv_obj_set_style_bg_color(ctx->bubble_label, lv_color_hex(W_SLIDER_BUBBLE_BG_HEX), LV_PART_MAIN);
-    lv_obj_set_style_bg_opa(ctx->bubble_label, LV_OPA_90, LV_PART_MAIN);
-    lv_obj_set_style_text_color(ctx->bubble_label, lv_color_hex(APP_UI_COLOR_TEXT_PRIMARY), LV_PART_MAIN);
-    lv_obj_set_style_radius(ctx->bubble_label, 10, LV_PART_MAIN);
-    lv_obj_set_style_pad_left(ctx->bubble_label, 9, LV_PART_MAIN);
-    lv_obj_set_style_pad_right(ctx->bubble_label, 9, LV_PART_MAIN);
-    lv_obj_set_style_pad_top(ctx->bubble_label, 4, LV_PART_MAIN);
-    lv_obj_set_style_pad_bottom(ctx->bubble_label, 4, LV_PART_MAIN);
-
-    ctx->direction_effective = slider_effective_direction(ctx, card);
-    const int display_value = slider_model_to_display_value(ctx->direction_effective, ctx->value);
     ctx->suppress_event = true;
-    lv_slider_set_range(ctx->slider, 0, 100);
-    lv_slider_set_value(ctx->slider, display_value, LV_ANIM_OFF);
+    lv_slider_set_value(ctx->slider, clamp_percent(ctx->value), LV_ANIM_OFF);
     ctx->suppress_event = false;
 
     slider_set_value_label(ctx->value_label, ctx->value);
-    slider_set_value_label(ctx->bubble_label, ctx->value);
     lv_label_set_text(ctx->state_label, ctx->unavailable ? "unavailable" : (ctx->is_on ? "ON" : "OFF"));
-
-    slider_apply_layout(card, ctx);
 }
 
 static void w_slider_event_cb(lv_event_t *event)
@@ -605,22 +469,23 @@ static void w_slider_event_cb(lv_event_t *event)
         ctx->dragging = true;
         slider_apply_visual(ctx);
     } else if (code == LV_EVENT_VALUE_CHANGED) {
-        int display_value = lv_slider_get_value(slider);
-        ctx->value = slider_display_to_model_value(ctx->direction_effective, display_value);
-        ctx->value = clamp_percent(ctx->value);
+        ctx->value = clamp_percent(lv_slider_get_value(slider));
         ctx->dragging = true;
         ctx->unavailable = false;
         ctx->is_on = ctx->value > 0;
         slider_apply_visual(ctx);
     } else if (code == LV_EVENT_RELEASED) {
-        int display_value = lv_slider_get_value(slider);
-        ctx->value = slider_display_to_model_value(ctx->direction_effective, display_value);
-        ctx->value = clamp_percent(ctx->value);
+        ctx->value = clamp_percent(lv_slider_get_value(slider));
         ctx->dragging = false;
         ctx->unavailable = false;
         ctx->is_on = ctx->value > 0;
         slider_apply_visual(ctx);
-        ui_bindings_set_slider_value(ctx->entity_id, ctx->value);
+        if (ctx->value != ctx->last_sent_value) {
+            esp_err_t err = ui_bindings_set_slider_value(ctx->entity_id, ctx->value);
+            if (err == ESP_OK) {
+                ctx->last_sent_value = ctx->value;
+            }
+        }
     } else if (code == LV_EVENT_PRESS_LOST) {
         ctx->dragging = false;
         slider_apply_visual(ctx);
@@ -670,17 +535,6 @@ esp_err_t w_slider_create(const ui_widget_def_t *def, lv_obj_t *parent, ui_widge
     lv_slider_set_value(slider, 0, LV_ANIM_OFF);
     lv_obj_clear_flag(slider, LV_OBJ_FLAG_EVENT_BUBBLE);
 
-    lv_obj_t *fill = lv_obj_create(slider);
-    lv_obj_remove_style_all(fill);
-    lv_obj_set_size(fill, 4, 4);
-    lv_obj_clear_flag(fill, LV_OBJ_FLAG_SCROLLABLE);
-    lv_obj_add_flag(fill, LV_OBJ_FLAG_IGNORE_LAYOUT);
-    lv_obj_clear_flag(fill, LV_OBJ_FLAG_CLICKABLE);
-
-    lv_obj_t *bubble = lv_label_create(card);
-    slider_set_value_label(bubble, 0);
-    lv_obj_add_flag(bubble, LV_OBJ_FLAG_HIDDEN);
-
     w_slider_ctx_t *ctx = calloc(1, sizeof(w_slider_ctx_t));
     if (ctx == NULL) {
         lv_obj_del(card);
@@ -692,8 +546,6 @@ esp_err_t w_slider_create(const ui_widget_def_t *def, lv_obj_t *parent, ui_widge
     ctx->state_label = state;
     ctx->value_label = value;
     ctx->slider = slider;
-    ctx->fill_obj = fill;
-    ctx->bubble_label = bubble;
     ctx->direction_cfg = slider_direction_from_text(def->slider_direction);
     ctx->direction_effective = slider_effective_direction(ctx, card);
     ctx->accent_color = lv_color_hex(APP_UI_COLOR_NAV_TAB_ACTIVE);
@@ -702,6 +554,7 @@ esp_err_t w_slider_create(const ui_widget_def_t *def, lv_obj_t *parent, ui_widge
     ctx->unavailable = false;
     ctx->dragging = false;
     ctx->suppress_event = false;
+    ctx->last_sent_value = -1;
 
     lv_color_t parsed_color = lv_color_hex(0);
     if (slider_parse_hex_color(def->slider_accent_color, &parsed_color)) {

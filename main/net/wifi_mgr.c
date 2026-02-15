@@ -12,6 +12,7 @@
 #include "esp_netif.h"
 #include "esp_timer.h"
 #include "esp_wifi.h"
+#include "driver/gpio.h"
 #include "soc/soc_caps.h"
 
 #if CONFIG_ESP_HOSTED_ENABLED
@@ -57,15 +58,28 @@ static bool s_hosted_transport_ready = false;
 #define WIFI_RECONNECT_DELAY_MAX_MS 20000
 #define WIFI_SCAN_TIMEOUT_MS 8000
 #define WIFI_STA_START_WAIT_MS 2000
+#define WIFI_HOSTED_HARD_RECOVER_COOLDOWN_MS 20000
 
 static int s_wifi_max_retries = WIFI_MAX_RETRIES_DEFAULT;
 static int64_t s_last_recover_disc_conn_ms = 0;
 static int64_t s_last_recover_stop_start_ms = 0;
 static int64_t s_last_connect_request_ms = 0;
+static int64_t s_last_hosted_hard_recover_ms = 0;
 static esp_timer_handle_t s_reconnect_timer = NULL;
 static uint8_t s_pending_reconnect_reason = 0;
 static int s_pending_reconnect_attempt = 0;
 static int s_wifi_scan_last_status = 0;
+
+static esp_err_t wifi_mgr_force_reconnect_internal(bool allow_transport_escalation);
+
+static void wifi_mgr_reset_reconnect_state(void)
+{
+    if (s_reconnect_timer != NULL && esp_timer_is_active(s_reconnect_timer)) {
+        (void)esp_timer_stop(s_reconnect_timer);
+    }
+    s_pending_reconnect_attempt = 0;
+    s_pending_reconnect_reason = 0;
+}
 
 static void wifi_mgr_set_setup_ap_state(bool active, const char *ssid)
 {
@@ -377,11 +391,7 @@ static void wifi_event_handler(void *arg, esp_event_base_t event_base, int32_t e
         s_wifi_connected = true;
         s_last_recover_disc_conn_ms = 0;
         s_last_recover_stop_start_ms = 0;
-        s_pending_reconnect_attempt = 0;
-        s_pending_reconnect_reason = 0;
-        if (s_reconnect_timer != NULL && esp_timer_is_active(s_reconnect_timer)) {
-            (void)esp_timer_stop(s_reconnect_timer);
-        }
+        wifi_mgr_reset_reconnect_state();
 #if APP_WIFI_DISABLE_POWER_SAVE
         esp_err_t ps_err = esp_wifi_set_ps(WIFI_PS_NONE);
         if (ps_err != ESP_OK) {
@@ -396,6 +406,51 @@ static void wifi_event_handler(void *arg, esp_event_base_t event_base, int32_t e
 }
 
 #if CONFIG_ESP_HOSTED_ENABLED
+#if CONFIG_ESP_HOSTED_SDIO_HOST_INTERFACE
+static void wifi_mgr_pulse_hosted_reset_gpio(void)
+{
+#if defined(CONFIG_ESP_HOSTED_SDIO_GPIO_RESET_SLAVE)
+    const int reset_gpio = CONFIG_ESP_HOSTED_SDIO_GPIO_RESET_SLAVE;
+    if (reset_gpio < 0) {
+        return;
+    }
+    if ((uint32_t)reset_gpio >= GPIO_PIN_COUNT) {
+        ESP_LOGW(TAG_WIFI, "Skip manual C6 reset pulse: invalid GPIO %d", reset_gpio);
+        return;
+    }
+
+    gpio_num_t reset_pin = (gpio_num_t)reset_gpio;
+    esp_err_t cfg_err = gpio_reset_pin(reset_pin);
+    if (cfg_err != ESP_OK) {
+        ESP_LOGW(TAG_WIFI, "gpio_reset_pin(%d) failed before C6 reset pulse: %s",
+            reset_gpio, esp_err_to_name(cfg_err));
+    }
+    cfg_err = gpio_set_direction(reset_pin, GPIO_MODE_OUTPUT);
+    if (cfg_err != ESP_OK) {
+        ESP_LOGW(TAG_WIFI, "gpio_set_direction(%d) failed before C6 reset pulse: %s",
+            reset_gpio, esp_err_to_name(cfg_err));
+        return;
+    }
+
+#if CONFIG_ESP_HOSTED_SDIO_RESET_ACTIVE_LOW
+    const int inactive_level = 1;
+    const int active_level = 0;
+#else
+    const int inactive_level = 0;
+    const int active_level = 1;
+#endif
+
+    (void)gpio_set_level(reset_pin, inactive_level);
+    vTaskDelay(pdMS_TO_TICKS(2));
+    (void)gpio_set_level(reset_pin, active_level);
+    vTaskDelay(pdMS_TO_TICKS(12));
+    (void)gpio_set_level(reset_pin, inactive_level);
+
+    ESP_LOGW(TAG_WIFI, "Manual C6 reset pulse on GPIO[%d]", reset_gpio);
+#endif
+}
+#endif
+
 static uint32_t hosted_version_pack(uint32_t major, uint32_t minor, uint32_t patch)
 {
     return ESP_HOSTED_VERSION_VAL((major & 0xFFU), (minor & 0xFFU), (patch & 0xFFU));
@@ -803,9 +858,103 @@ bool wifi_mgr_is_connected(void)
     return s_wifi_connected;
 }
 
-esp_err_t wifi_mgr_force_reconnect(void)
+#if CONFIG_ESP_HOSTED_ENABLED
+static esp_err_t wifi_mgr_force_hosted_hard_recover(void)
+{
+    int64_t now_ms = esp_timer_get_time() / 1000;
+    if ((now_ms - s_last_hosted_hard_recover_ms) < WIFI_HOSTED_HARD_RECOVER_COOLDOWN_MS) {
+        ESP_LOGW(TAG_WIFI, "Skip C6 hard recover: cooldown active (%" PRId64 " ms since last), fallback to Wi-Fi reconnect",
+            now_ms - s_last_hosted_hard_recover_ms);
+        return wifi_mgr_force_reconnect_internal(false);
+    }
+
+    wifi_mode_t previous_mode = WIFI_MODE_STA;
+    bool mode_captured = (esp_wifi_get_mode(&previous_mode) == ESP_OK);
+    wifi_config_t sta_cfg = {0};
+    bool sta_cfg_captured = (esp_wifi_get_config(WIFI_IF_STA, &sta_cfg) == ESP_OK);
+
+    s_wifi_connected = false;
+    s_last_connect_request_ms = 0;
+    s_last_recover_disc_conn_ms = 0;
+    s_last_recover_stop_start_ms = 0;
+    wifi_mgr_reset_reconnect_state();
+    if (s_wifi_event_group != NULL) {
+        xEventGroupClearBits(s_wifi_event_group, WIFI_CONNECTED_BIT | WIFI_FAIL_BIT);
+    }
+
+    esp_err_t stop_err = esp_wifi_stop();
+    if (stop_err != ESP_OK &&
+        stop_err != ESP_ERR_WIFI_NOT_INIT &&
+        stop_err != ESP_ERR_WIFI_NOT_STARTED &&
+        stop_err != ESP_ERR_INVALID_STATE) {
+        ESP_LOGW(TAG_WIFI, "esp_wifi_stop failed during hard recover: %s", esp_err_to_name(stop_err));
+    }
+
+    int deinit_ret = esp_hosted_deinit();
+    if (deinit_ret != ESP_OK) {
+        ESP_LOGW(TAG_WIFI, "esp_hosted_deinit during hard recover returned: %s", esp_err_to_name((esp_err_t)deinit_ret));
+    }
+    s_hosted_transport_ready = false;
+
+#if CONFIG_ESP_HOSTED_SDIO_HOST_INTERFACE
+    wifi_mgr_pulse_hosted_reset_gpio();
+#endif
+
+    esp_err_t hosted_err = wifi_mgr_init_hosted_transport();
+    if (hosted_err != ESP_OK) {
+        ESP_LOGE(TAG_WIFI, "C6 hard recover failed: ESP-Hosted re-init failed (%s)", esp_err_to_name(hosted_err));
+        return hosted_err;
+    }
+
+    wifi_mode_t restore_mode = s_setup_ap_active ? WIFI_MODE_APSTA : WIFI_MODE_STA;
+    if (mode_captured) {
+        if (s_setup_ap_active) {
+            restore_mode = WIFI_MODE_APSTA;
+        } else if (previous_mode == WIFI_MODE_STA || previous_mode == WIFI_MODE_APSTA) {
+            restore_mode = WIFI_MODE_STA;
+        }
+    }
+
+    esp_err_t mode_err = esp_wifi_set_mode(restore_mode);
+    if (mode_err != ESP_OK && mode_err != ESP_ERR_INVALID_STATE) {
+        ESP_LOGE(TAG_WIFI, "esp_wifi_set_mode failed during hard recover: %s", esp_err_to_name(mode_err));
+        return mode_err;
+    }
+
+    if (sta_cfg_captured) {
+        esp_err_t cfg_err = esp_wifi_set_config(WIFI_IF_STA, &sta_cfg);
+        if (cfg_err != ESP_OK) {
+            ESP_LOGW(TAG_WIFI, "esp_wifi_set_config(STA) failed during hard recover: %s", esp_err_to_name(cfg_err));
+        }
+    }
+
+    esp_err_t start_err = esp_wifi_start();
+    if (start_err != ESP_OK && start_err != ESP_ERR_INVALID_STATE) {
+        ESP_LOGE(TAG_WIFI, "esp_wifi_start failed during hard recover: %s", esp_err_to_name(start_err));
+        return start_err;
+    }
+
+#if APP_WIFI_DISABLE_POWER_SAVE
+    esp_err_t ps_err = esp_wifi_set_ps(WIFI_PS_NONE);
+    if (ps_err != ESP_OK) {
+        ESP_LOGW(TAG_WIFI, "esp_wifi_set_ps(WIFI_PS_NONE) failed during hard recover: %s", esp_err_to_name(ps_err));
+    }
+#endif
+
+    if (!wifi_mgr_request_connect(true, "after-c6-hard-recover")) {
+        return ESP_FAIL;
+    }
+
+    s_last_hosted_hard_recover_ms = now_ms;
+    ESP_LOGW(TAG_WIFI, "C6 hard recover complete: ESP-Hosted reinitialized and Wi-Fi reconnect requested");
+    return ESP_OK;
+}
+#endif
+
+static esp_err_t wifi_mgr_force_reconnect_internal(bool allow_transport_escalation)
 {
 #if !SOC_WIFI_SUPPORTED && !CONFIG_ESP_HOSTED_ENABLED
+    (void)allow_transport_escalation;
     return ESP_ERR_NOT_SUPPORTED;
 #else
     if (s_wifi_sta_netif == NULL) {
@@ -814,6 +963,7 @@ esp_err_t wifi_mgr_force_reconnect(void)
 
     s_wifi_connected = false;
     s_last_connect_request_ms = 0;
+    wifi_mgr_reset_reconnect_state();
     if (s_wifi_event_group != NULL) {
         xEventGroupClearBits(s_wifi_event_group, WIFI_CONNECTED_BIT);
     }
@@ -821,14 +971,45 @@ esp_err_t wifi_mgr_force_reconnect(void)
     esp_err_t err = esp_wifi_disconnect();
     if (err != ESP_OK && err != ESP_ERR_WIFI_NOT_CONNECT) {
         ESP_LOGW(TAG_WIFI, "esp_wifi_disconnect failed during forced reconnect: %s", esp_err_to_name(err));
+#if CONFIG_ESP_HOSTED_ENABLED
+        if (allow_transport_escalation) {
+            ESP_LOGW(TAG_WIFI,
+                "Escalating forced reconnect failure (disconnect step) to C6 hard recover");
+            return wifi_mgr_force_hosted_hard_recover();
+        }
+#endif
+        return err;
     }
 
     if (!wifi_mgr_request_connect(true, "force-reconnect")) {
+#if CONFIG_ESP_HOSTED_ENABLED
+        if (allow_transport_escalation) {
+            ESP_LOGW(TAG_WIFI,
+                "Escalating forced reconnect failure (connect step) to C6 hard recover");
+            return wifi_mgr_force_hosted_hard_recover();
+        }
+#endif
         return ESP_FAIL;
     }
 
     ESP_LOGW(TAG_WIFI, "Forced Wi-Fi reconnect triggered");
     return ESP_OK;
+#endif
+}
+
+esp_err_t wifi_mgr_force_reconnect(void)
+{
+    return wifi_mgr_force_reconnect_internal(true);
+}
+
+esp_err_t wifi_mgr_force_transport_recover(void)
+{
+#if !SOC_WIFI_SUPPORTED && !CONFIG_ESP_HOSTED_ENABLED
+    return ESP_ERR_NOT_SUPPORTED;
+#elif CONFIG_ESP_HOSTED_ENABLED
+    return wifi_mgr_force_hosted_hard_recover();
+#else
+    return wifi_mgr_force_reconnect();
 #endif
 }
 
@@ -879,11 +1060,7 @@ esp_err_t wifi_mgr_start_setup_ap(const wifi_mgr_ap_config_t *cfg)
         ap_cfg.ap.authmode = WIFI_AUTH_OPEN;
     }
 
-    if (s_reconnect_timer != NULL && esp_timer_is_active(s_reconnect_timer)) {
-        (void)esp_timer_stop(s_reconnect_timer);
-    }
-    s_pending_reconnect_attempt = 0;
-    s_pending_reconnect_reason = 0;
+    wifi_mgr_reset_reconnect_state();
 
     ESP_RETURN_ON_ERROR(esp_wifi_set_mode(WIFI_MODE_APSTA), TAG_WIFI, "esp_wifi_set_mode(APSTA)");
     ESP_RETURN_ON_ERROR(esp_wifi_set_config(WIFI_IF_AP, &ap_cfg), TAG_WIFI, "esp_wifi_set_config(AP)");

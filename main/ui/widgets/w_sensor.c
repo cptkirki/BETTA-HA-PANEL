@@ -10,16 +10,14 @@
 
 #include "ui/theme/theme_default.h"
 
-#if LV_FONT_MONTSERRAT_40
-#define SENSOR_VALUE_FONT_LARGE (&lv_font_montserrat_40)
-#elif LV_FONT_MONTSERRAT_36
-#define SENSOR_VALUE_FONT_LARGE (&lv_font_montserrat_36)
-#elif LV_FONT_MONTSERRAT_34
-#define SENSOR_VALUE_FONT_LARGE (&lv_font_montserrat_34)
-#elif LV_FONT_MONTSERRAT_32
-#define SENSOR_VALUE_FONT_LARGE (&lv_font_montserrat_32)
+#if LV_FONT_MONTSERRAT_24
+#define SENSOR_VALUE_FONT_SMALL (&lv_font_montserrat_24)
+#elif LV_FONT_MONTSERRAT_22
+#define SENSOR_VALUE_FONT_SMALL (&lv_font_montserrat_22)
+#elif LV_FONT_MONTSERRAT_20
+#define SENSOR_VALUE_FONT_SMALL (&lv_font_montserrat_20)
 #else
-#define SENSOR_VALUE_FONT_LARGE LV_FONT_DEFAULT
+#define SENSOR_VALUE_FONT_SMALL LV_FONT_DEFAULT
 #endif
 
 #if LV_FONT_MONTSERRAT_32
@@ -29,17 +27,33 @@
 #elif LV_FONT_MONTSERRAT_24
 #define SENSOR_VALUE_FONT_MEDIUM (&lv_font_montserrat_24)
 #else
-#define SENSOR_VALUE_FONT_MEDIUM LV_FONT_DEFAULT
+#define SENSOR_VALUE_FONT_MEDIUM SENSOR_VALUE_FONT_SMALL
 #endif
 
-#if LV_FONT_MONTSERRAT_24
-#define SENSOR_VALUE_FONT_SMALL (&lv_font_montserrat_24)
-#elif LV_FONT_MONTSERRAT_22
-#define SENSOR_VALUE_FONT_SMALL (&lv_font_montserrat_22)
-#elif LV_FONT_MONTSERRAT_20
-#define SENSOR_VALUE_FONT_SMALL (&lv_font_montserrat_20)
+#if LV_FONT_MONTSERRAT_44
+#define SENSOR_VALUE_FONT_LARGE (&lv_font_montserrat_44)
+#elif LV_FONT_MONTSERRAT_40
+#define SENSOR_VALUE_FONT_LARGE (&lv_font_montserrat_40)
+#elif LV_FONT_MONTSERRAT_36
+#define SENSOR_VALUE_FONT_LARGE (&lv_font_montserrat_36)
+#elif LV_FONT_MONTSERRAT_34
+#define SENSOR_VALUE_FONT_LARGE (&lv_font_montserrat_34)
+#elif LV_FONT_MONTSERRAT_32
+#define SENSOR_VALUE_FONT_LARGE (&lv_font_montserrat_32)
 #else
-#define SENSOR_VALUE_FONT_SMALL LV_FONT_DEFAULT
+#define SENSOR_VALUE_FONT_LARGE SENSOR_VALUE_FONT_MEDIUM
+#endif
+
+#if LV_FONT_MONTSERRAT_56
+#define SENSOR_VALUE_FONT_XL (&lv_font_montserrat_56)
+#elif LV_FONT_MONTSERRAT_52
+#define SENSOR_VALUE_FONT_XL (&lv_font_montserrat_52)
+#elif LV_FONT_MONTSERRAT_48
+#define SENSOR_VALUE_FONT_XL (&lv_font_montserrat_48)
+#elif LV_FONT_MONTSERRAT_44
+#define SENSOR_VALUE_FONT_XL (&lv_font_montserrat_44)
+#else
+#define SENSOR_VALUE_FONT_XL SENSOR_VALUE_FONT_LARGE
 #endif
 
 #if LV_FONT_MONTSERRAT_18
@@ -84,10 +98,13 @@ static const lv_font_t *sensor_pick_value_font(const w_sensor_ctx_t *ctx)
     lv_coord_t h = lv_obj_get_height(ctx->card);
     lv_coord_t min_dim = (w < h) ? w : h;
 
-    if (min_dim >= 240) {
+    if (min_dim >= 260) {
+        return SENSOR_VALUE_FONT_XL;
+    }
+    if (min_dim >= 190) {
         return SENSOR_VALUE_FONT_LARGE;
     }
-    if (min_dim >= 170) {
+    if (min_dim >= 140) {
         return SENSOR_VALUE_FONT_MEDIUM;
     }
     return SENSOR_VALUE_FONT_SMALL;
@@ -179,7 +196,18 @@ static void sensor_apply_layout(w_sensor_ctx_t *ctx)
     lv_obj_align(ctx->title_label, LV_ALIGN_TOP_MID, 0, APP_UI_TILE_LAYOUT_TUNED ? 2 : 0);
 
     const bool show_age = !lv_obj_has_flag(ctx->age_label, LV_OBJ_FLAG_HIDDEN);
-    lv_obj_align(ctx->value_label, LV_ALIGN_CENTER, 0, show_age ? -8 : 0);
+    lv_coord_t min_dim = (content_w < content_h) ? content_w : content_h;
+    lv_coord_t value_y = 0;
+    if (show_age) {
+        if (min_dim >= 260) {
+            value_y = -18;
+        } else if (min_dim >= 190) {
+            value_y = -14;
+        } else {
+            value_y = -10;
+        }
+    }
+    lv_obj_align(ctx->value_label, LV_ALIGN_CENTER, 0, value_y);
 
     if (show_age) {
         lv_obj_align_to(ctx->age_label, ctx->value_label, LV_ALIGN_OUT_BOTTOM_MID, 0, 4);
@@ -251,7 +279,12 @@ esp_err_t w_sensor_create(const ui_widget_def_t *def, lv_obj_t *parent, ui_widge
     lv_obj_t *card = lv_obj_create(parent);
     lv_obj_set_pos(card, def->x, def->y);
     lv_obj_set_size(card, def->w, def->h);
+    lv_obj_clear_flag(card, LV_OBJ_FLAG_SCROLLABLE);
     theme_default_style_card(card);
+    lv_obj_set_style_pad_left(card, 10, LV_PART_MAIN);
+    lv_obj_set_style_pad_right(card, 10, LV_PART_MAIN);
+    lv_obj_set_style_pad_top(card, 10, LV_PART_MAIN);
+    lv_obj_set_style_pad_bottom(card, 10, LV_PART_MAIN);
 
     lv_obj_t *title = lv_label_create(card);
     lv_label_set_text(title, def->title[0] ? def->title : def->id);

@@ -199,3 +199,8 @@ if(CONFIG_LV_USE_LOTTIE)
 endif()
 
 target_compile_definitions(${COMPONENT_LIB} PRIVATE APP_UI_WEATHER_LOTTIE_ASSETS=${APP_UI_WEATHER_LOTTIE_ASSETS})
+
+# Keep strict warnings in project code, but silence an upstream ThorVG warning in lvgl.
+if(TARGET __idf_lvgl__lvgl)
+    target_compile_options(__idf_lvgl__lvgl PRIVATE $<$<COMPILE_LANGUAGE:CXX>:-Wno-type-limits>)
+endif()

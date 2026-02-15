@@ -108,6 +108,17 @@
                   <input id="fSliderAccentColor" type="color" value="#6fe8ff" />
                 </label>
               </div>
+              <div id="graphOptions" class="slider-options hidden">
+                <label>Graph Line Color
+                  <input id="fGraphLineColor" type="color" value="#6fe8ff" />
+                </label>
+                <label>Time Window (minutes)
+                  <input id="fGraphTimeWindowMin" type="number" min="1" max="1440" step="1" value="120" />
+                </label>
+                <label>Render Points (empty = auto)
+                  <input id="fGraphPointCount" type="number" min="16" max="64" step="1" placeholder="auto" />
+                </label>
+              </div>
               <div class="grid-2">
                 <label>X <input id="fX" type="number" /></label>
                 <label>Y <input id="fY" type="number" /></label>

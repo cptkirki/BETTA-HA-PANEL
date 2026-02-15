@@ -74,20 +74,22 @@ static void ui_pages_style_nav_button(lv_obj_t *btn, lv_obj_t *label, bool selec
         return;
     }
 
-    const lv_color_t btn_bg_idle = lv_color_hex(APP_UI_COLOR_NAV_BTN_BG_IDLE);
-    const lv_color_t btn_bg_active = lv_color_hex(APP_UI_COLOR_NAV_BTN_BG_ACTIVE);
-    /* Keep nav styles rectangular/flat (radius=0) to avoid heavy mask rendering. */
-    lv_obj_set_style_bg_color(btn, selected ? btn_bg_active : btn_bg_idle, LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_bg_opa(btn, selected ? LV_OPA_COVER : LV_OPA_80, LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_border_side(btn, LV_BORDER_SIDE_NONE, LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_border_opa(btn, LV_OPA_TRANSP, LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_border_width(btn, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
+    const lv_color_t chip_bg = lv_color_hex(APP_UI_COLOR_TOPBAR_CHIP_BG);
+    const lv_color_t chip_border = lv_color_hex(APP_UI_COLOR_TOPBAR_CHIP_BORDER);
+    lv_obj_set_style_bg_color(btn, chip_bg, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_bg_opa(btn, selected ? LV_OPA_80 : LV_OPA_70, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_border_side(btn, LV_BORDER_SIDE_FULL, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_border_opa(btn, selected ? LV_OPA_COVER : LV_OPA_80, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_border_width(btn, 1, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_border_color(btn, chip_border, LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_obj_set_style_outline_width(btn, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_radius(btn, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_radius(btn, 12, LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_obj_set_style_shadow_width(btn, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_obj_set_style_shadow_opa(btn, LV_OPA_0, LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_obj_set_style_pad_all(btn, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_clip_corner(btn, false, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_clip_corner(btn, true, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_bg_opa(btn, LV_OPA_COVER, LV_PART_MAIN | LV_STATE_PRESSED);
+    lv_obj_set_style_border_opa(btn, LV_OPA_COVER, LV_PART_MAIN | LV_STATE_PRESSED);
     lv_obj_set_style_bg_opa(label, LV_OPA_TRANSP, LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_obj_set_style_text_opa(label, LV_OPA_COVER, LV_PART_MAIN | LV_STATE_DEFAULT);
 
@@ -102,7 +104,7 @@ static void ui_pages_style_nav_button(lv_obj_t *btn, lv_obj_t *label, bool selec
             label,
             selected ? lv_color_hex(APP_UI_COLOR_NAV_TAB_ACTIVE) : lv_color_hex(APP_UI_COLOR_NAV_TAB_IDLE),
             LV_PART_MAIN | LV_STATE_DEFAULT);
-        lv_obj_set_style_text_decor(label, selected ? LV_TEXT_DECOR_UNDERLINE : LV_TEXT_DECOR_NONE, LV_PART_MAIN | LV_STATE_DEFAULT);
+        lv_obj_set_style_text_decor(label, LV_TEXT_DECOR_NONE, LV_PART_MAIN | LV_STATE_DEFAULT);
     }
 }
 
@@ -112,9 +114,9 @@ static void ui_pages_apply_tab_style(uint16_t selected_index)
         return;
     }
 
-    const lv_coord_t nav_btn_h = 48;
+    const lv_coord_t nav_btn_h = 42;
     const lv_coord_t nav_home_w = 72;
-    const lv_coord_t nav_btn_y = 8;
+    const lv_coord_t nav_btn_y = 9;
     const lv_coord_t nav_outer_margin = 14;
     const lv_coord_t nav_home_gap = 12;
     const lv_coord_t nav_side_gap = 8;
@@ -298,10 +300,12 @@ static void ui_pages_create_nav(lv_obj_t *screen)
     lv_obj_set_pos(s_nav_bar, 0, 660);
     lv_obj_clear_flag(s_nav_bar, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_set_style_radius(s_nav_bar, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_bg_color(s_nav_bar, lv_color_hex(APP_UI_COLOR_NAV_BG), LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_bg_opa(s_nav_bar, LV_OPA_90, LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_border_width(s_nav_bar, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_border_opa(s_nav_bar, LV_OPA_TRANSP, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_bg_color(s_nav_bar, lv_color_hex(APP_UI_COLOR_TOPBAR_BG), LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_bg_opa(s_nav_bar, LV_OPA_COVER, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_border_width(s_nav_bar, 1, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_border_side(s_nav_bar, LV_BORDER_SIDE_TOP, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_border_color(s_nav_bar, lv_color_hex(APP_UI_COLOR_TOPBAR_BORDER), LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_border_opa(s_nav_bar, LV_OPA_70, LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_obj_set_style_pad_all(s_nav_bar, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_obj_set_style_shadow_width(s_nav_bar, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
 

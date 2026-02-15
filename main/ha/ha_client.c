@@ -95,16 +95,18 @@ typedef struct {
 static ha_client_state_t s_client = {0};
 static const int HA_WEATHER_COMPACT_FORECAST_MAX_ITEMS = 4;
 static const int64_t HA_WS_RESTART_INTERVAL_MS = 12000;
-static const int64_t HA_WS_RESTART_INTERVAL_MAX_MS = 120000;
+static const int64_t HA_WS_RESTART_INTERVAL_MAX_MS = 30000;
 static const int64_t HA_WS_RESTART_JITTER_MS = 1000;
-static const int64_t HA_WS_CONNECT_GRACE_MS = 45000;
+static const int64_t HA_WS_CONNECT_GRACE_MS = 15000;
 static const int64_t HA_WS_SHORT_SESSION_MS = 180000;
 static const uint8_t HA_WS_SHORT_SESSION_STRIKES_TO_WIFI_RECOVER = 4;
-static const uint32_t HA_WS_ERROR_STREAK_WIFI_RECOVER_THRESHOLD = 6;
+static const uint8_t HA_WS_SHORT_SESSION_STRIKES_TO_TRANSPORT_RECOVER = 6;
+static const uint32_t HA_WS_ERROR_STREAK_WIFI_RECOVER_THRESHOLD = 3;
+static const uint32_t HA_WS_ERROR_STREAK_TRANSPORT_RECOVER_THRESHOLD = 4;
 static const int64_t HA_WS_PING_INTERVAL_MIN_MS = 30000;
 static const int64_t HA_WS_PING_TIMEOUT_MIN_MS = 45000;
 static const int64_t HA_WIFI_DOWN_RECOVERY_MS = 15000;
-static const int64_t HA_WIFI_FORCE_RECOVER_COOLDOWN_MS = 30000;
+static const int64_t HA_WIFI_FORCE_RECOVER_COOLDOWN_MS = 12000;
 static const int64_t HA_AUTH_RETRY_INTERVAL_MS = 1000;
 static const int64_t HA_INITIAL_LAYOUT_SYNC_STEP_INTERVAL_MS = 500;
 static const int64_t HA_INITIAL_LAYOUT_SYNC_RETRY_INTERVAL_MS = 6000;
@@ -115,6 +117,7 @@ static const int64_t HA_PRIORITY_SYNC_RETRY_INTERVAL_MS = 1500;
 static const size_t HA_TRIGGER_SUBSCRIBE_MAX_ENTITIES = 64;
 static const int HA_WS_RX_DRAIN_BUDGET = 32;
 static const uint8_t HA_PING_TIMEOUT_STRIKES_TO_RECONNECT = 2;
+static const bool HA_USE_TRIGGER_SUBSCRIPTION = true;
 static const TickType_t HA_CLIENT_TASK_DELAY_TICKS = pdMS_TO_TICKS(30);
 static void ha_client_handle_text_message(const char *data, int len);
 static void ha_client_import_state_object(cJSON *state_obj);
@@ -122,10 +125,46 @@ static void ha_client_publish_event(app_event_type_t type, const char *entity_id
 static int64_t ha_client_ping_interval_ms_effective(void);
 static esp_err_t ha_client_sync_layout_entity_step(bool is_initial, uint32_t *io_index, uint32_t *out_count,
     uint32_t *io_imported, bool *out_done);
+static esp_err_t ha_client_call_service_http(const char *domain, const char *service, const char *json_service_data);
 static char s_ws_rx_buf[8192];
 static int s_ws_rx_len = 0;
 static int s_ws_rx_expected_len = 0;
 static bool s_ws_rx_overflow = false;
+
+static esp_err_t ha_client_force_recover_with_escalation(bool prefer_transport, const char *reason, bool *out_used_transport)
+{
+    if (out_used_transport != NULL) {
+        *out_used_transport = prefer_transport;
+    }
+
+    if (prefer_transport) {
+        return wifi_mgr_force_transport_recover();
+    }
+
+    esp_err_t err = wifi_mgr_force_reconnect();
+    if (err == ESP_OK) {
+        return ESP_OK;
+    }
+
+    ESP_LOGW(TAG_HA_CLIENT,
+        "Wi-Fi reconnect recover failed (%s): %s, escalating to C6 transport recover",
+        (reason != NULL) ? reason : "unknown",
+        esp_err_to_name(err));
+
+    esp_err_t transport_err = wifi_mgr_force_transport_recover();
+    if (transport_err == ESP_OK) {
+        if (out_used_transport != NULL) {
+            *out_used_transport = true;
+        }
+        return ESP_OK;
+    }
+
+    ESP_LOGW(TAG_HA_CLIENT,
+        "C6 transport recover failed after reconnect failure (%s): %s",
+        (reason != NULL) ? reason : "unknown",
+        esp_err_to_name(transport_err));
+    return transport_err;
+}
 
 static void ha_client_free_ws_msg(ha_ws_rx_msg_t *msg)
 {
@@ -301,6 +340,27 @@ static bool ha_client_entity_is_climate(const char *entity_id)
         return false;
     }
     return strncmp(entity_id, "climate.", 8) == 0;
+}
+
+static bool ha_client_entity_is_media_player(const char *entity_id)
+{
+    if (entity_id == NULL) {
+        return false;
+    }
+    return strncmp(entity_id, "media_player.", 13) == 0;
+}
+
+static bool ha_client_entity_should_use_trigger_subscription(const char *entity_id)
+{
+    if (entity_id == NULL || entity_id[0] == '\0') {
+        return false;
+    }
+    /* Media player entities can emit high-rate, large state_changed payloads.
+       Keep them off WS triggers; they are handled via REST sync/service paths. */
+    if (ha_client_entity_is_media_player(entity_id)) {
+        return false;
+    }
+    return true;
 }
 
 static bool ha_client_copy_attr_dup(cJSON *dst_obj, const char *dst_key, cJSON *src_obj, const char *src_key)
@@ -619,6 +679,56 @@ static bool ha_client_serialize_climate_attrs_compact(cJSON *src_attrs, char *ou
     any |= ha_client_copy_attr_dup(compact, "target_temp_low", src_attrs, "target_temp_low");
     any |= ha_client_copy_attr_dup(compact, "target_temp_high", src_attrs, "target_temp_high");
     any |= ha_client_copy_attr_dup(compact, "humidity", src_attrs, "humidity");
+
+    if (!any) {
+        cJSON_Delete(compact);
+        return false;
+    }
+
+    char *compact_json = cJSON_PrintUnformatted(compact);
+    cJSON_Delete(compact);
+    if (compact_json == NULL) {
+        return false;
+    }
+
+    size_t len = strlen(compact_json);
+    bool fits = (len < out_json_size);
+    if (fits) {
+        memcpy(out_json, compact_json, len + 1U);
+    }
+    cJSON_free(compact_json);
+    return fits;
+}
+
+static bool ha_client_serialize_media_player_attrs_compact(cJSON *src_attrs, char *out_json, size_t out_json_size)
+{
+    if (!cJSON_IsObject(src_attrs) || out_json == NULL || out_json_size == 0) {
+        return false;
+    }
+
+    cJSON *compact = cJSON_CreateObject();
+    if (compact == NULL) {
+        return false;
+    }
+
+    bool any = false;
+    cJSON *volume_level = cJSON_GetObjectItemCaseSensitive(src_attrs, "volume_level");
+    if (cJSON_IsNumber(volume_level)) {
+        double volume = volume_level->valuedouble;
+        if (volume < 0.0) {
+            volume = 0.0;
+        } else if (volume > 1.0) {
+            volume = 1.0;
+        }
+        cJSON_AddNumberToObject(compact, "volume_level", volume);
+        any = true;
+    }
+
+    cJSON *is_volume_muted = cJSON_GetObjectItemCaseSensitive(src_attrs, "is_volume_muted");
+    if (cJSON_IsBool(is_volume_muted)) {
+        cJSON_AddBoolToObject(compact, "is_volume_muted", cJSON_IsTrue(is_volume_muted));
+        any = true;
+    }
 
     if (!any) {
         cJSON_Delete(compact);
@@ -1390,6 +1500,94 @@ static esp_err_t ha_client_fetch_state_http(const char *entity_id)
     return ESP_OK;
 }
 
+static esp_err_t ha_client_call_service_http(const char *domain, const char *service, const char *json_service_data)
+{
+    if (domain == NULL || service == NULL || domain[0] == '\0' || service[0] == '\0') {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    char base_url[256] = {0};
+    char host_header[192] = {0};
+    char cert_common_name[128] = {0};
+    bool context_ok = false;
+    if (s_client.mutex != NULL) {
+        xSemaphoreTake(s_client.mutex, portMAX_DELAY);
+    }
+    context_ok = ha_client_build_http_request_context(
+        s_client.ws_url, base_url, sizeof(base_url), host_header, sizeof(host_header), cert_common_name, sizeof(cert_common_name));
+    if (s_client.mutex != NULL) {
+        xSemaphoreGive(s_client.mutex);
+    }
+    if (!context_ok) {
+        ESP_LOGW(TAG_HA_CLIENT, "Failed to build HA HTTP context for service %s.%s", domain, service);
+        return ESP_ERR_HTTP_CONNECT;
+    }
+
+    char url[384] = {0};
+    int url_len = snprintf(url, sizeof(url), "%s/api/services/%s/%s", base_url, domain, service);
+    if (url_len <= 0 || (size_t)url_len >= sizeof(url)) {
+        return ESP_ERR_INVALID_SIZE;
+    }
+
+    const char *body = (json_service_data != NULL && json_service_data[0] != '\0') ? json_service_data : "{}";
+    int body_len = (int)strlen(body);
+
+    esp_http_client_config_t http_cfg = {
+        .url = url,
+        .timeout_ms = 10000,
+        .keep_alive_enable = false,
+        .buffer_size = 1024,
+        .buffer_size_tx = 1024,
+    };
+#if CONFIG_MBEDTLS_CERTIFICATE_BUNDLE
+    if (strncmp(base_url, "https://", 8) == 0) {
+        http_cfg.crt_bundle_attach = esp_crt_bundle_attach;
+    }
+#endif
+    if (cert_common_name[0] != '\0') {
+        http_cfg.common_name = cert_common_name;
+    }
+
+    esp_http_client_handle_t client = esp_http_client_init(&http_cfg);
+    if (client == NULL) {
+        return ESP_ERR_NO_MEM;
+    }
+
+    char auth_header[640] = {0};
+    snprintf(auth_header, sizeof(auth_header), "Bearer %s", s_client.access_token);
+
+    esp_http_client_set_method(client, HTTP_METHOD_POST);
+    esp_http_client_set_header(client, "Authorization", auth_header);
+    esp_http_client_set_header(client, "Accept", "application/json");
+    esp_http_client_set_header(client, "Content-Type", "application/json");
+    if (host_header[0] != '\0') {
+        esp_http_client_set_header(client, "Host", host_header);
+    }
+
+    esp_err_t err = esp_http_client_open(client, body_len);
+    if (err != ESP_OK) {
+        esp_http_client_cleanup(client);
+        return err;
+    }
+
+    int written = esp_http_client_write(client, body, body_len);
+    if (written < body_len) {
+        esp_http_client_close(client);
+        esp_http_client_cleanup(client);
+        return ESP_FAIL;
+    }
+
+    (void)esp_http_client_fetch_headers(client);
+    int status = esp_http_client_get_status_code(client);
+    esp_http_client_close(client);
+    esp_http_client_cleanup(client);
+
+    if (status == 200 || status == 201) {
+        return ESP_OK;
+    }
+    return ESP_ERR_INVALID_RESPONSE;
+}
+
 static esp_err_t ha_client_sync_layout_entity_step(bool is_initial, uint32_t *io_index, uint32_t *out_count,
     uint32_t *io_imported, bool *out_done)
 {
@@ -1519,10 +1717,28 @@ static esp_err_t ha_client_send_subscribe_layout_state_trigger(void)
         free(entity_ids);
         return ESP_ERR_NOT_FOUND;
     }
-    if (entity_count > HA_TRIGGER_SUBSCRIBE_MAX_ENTITIES) {
+    size_t eligible_count = 0;
+    for (size_t i = 0; i < entity_count; i++) {
+        const char *entity_id = entity_ids + (i * APP_MAX_ENTITY_ID_LEN);
+        if (ha_client_entity_should_use_trigger_subscription(entity_id)) {
+            eligible_count++;
+        }
+    }
+    size_t skipped_count = entity_count - eligible_count;
+    if (eligible_count == 0) {
+        xSemaphoreTake(s_client.mutex, portMAX_DELAY);
+        s_client.sub_state_via_trigger = false;
+        s_client.trigger_sub_req_id = 0;
+        xSemaphoreGive(s_client.mutex);
+        ESP_LOGW(TAG_HA_CLIENT, "No eligible entities for trigger subscription (skipped=%u)",
+            (unsigned)skipped_count);
+        free(entity_ids);
+        return ESP_OK;
+    }
+    if (eligible_count > HA_TRIGGER_SUBSCRIBE_MAX_ENTITIES) {
         ESP_LOGW(TAG_HA_CLIENT,
-            "Layout has %u entities; trigger-subscription limit is %u. Falling back to global state_changed",
-            (unsigned)entity_count, (unsigned)HA_TRIGGER_SUBSCRIBE_MAX_ENTITIES);
+            "Layout has %u eligible trigger entities; limit is %u. Falling back to global state_changed",
+            (unsigned)eligible_count, (unsigned)HA_TRIGGER_SUBSCRIBE_MAX_ENTITIES);
         free(entity_ids);
         return ESP_ERR_INVALID_SIZE;
     }
@@ -1542,6 +1758,9 @@ static esp_err_t ha_client_send_subscribe_layout_state_trigger(void)
 
     for (size_t i = 0; i < entity_count; i++) {
         const char *entity_id = entity_ids + (i * APP_MAX_ENTITY_ID_LEN);
+        if (!ha_client_entity_should_use_trigger_subscription(entity_id)) {
+            continue;
+        }
         cJSON *trigger = cJSON_CreateObject();
         if (trigger == NULL) {
             cJSON_Delete(root);
@@ -1566,15 +1785,20 @@ static esp_err_t ha_client_send_subscribe_layout_state_trigger(void)
     s_client.trigger_sub_req_id = req_id;
     s_client.sub_state_via_trigger = true;
     xSemaphoreGive(s_client.mutex);
-    ESP_LOGI(TAG_HA_CLIENT, "Subscribed to layout state changes via trigger (%u entities)", (unsigned)entity_count);
+    ESP_LOGI(TAG_HA_CLIENT, "Subscribed to layout state changes via trigger (%u entities, skipped=%u)",
+        (unsigned)eligible_count, (unsigned)skipped_count);
     return ESP_OK;
 }
 
 static esp_err_t ha_client_send_subscribe_state_changed(void)
 {
-    esp_err_t trigger_err = ha_client_send_subscribe_layout_state_trigger();
-    if (trigger_err == ESP_OK) {
-        return ESP_OK;
+    if (HA_USE_TRIGGER_SUBSCRIPTION) {
+        esp_err_t trigger_err = ha_client_send_subscribe_layout_state_trigger();
+        if (trigger_err == ESP_OK) {
+            return ESP_OK;
+        }
+        ESP_LOGW(TAG_HA_CLIENT, "Trigger subscribe failed (%s), falling back to global state_changed",
+            esp_err_to_name(trigger_err));
     }
 
     cJSON *root = cJSON_CreateObject();
@@ -1592,7 +1816,7 @@ static esp_err_t ha_client_send_subscribe_state_changed(void)
         s_client.sub_state_via_trigger = false;
         s_client.trigger_sub_req_id = 0;
         xSemaphoreGive(s_client.mutex);
-        ESP_LOGW(TAG_HA_CLIENT, "Using global state_changed subscription fallback");
+        ESP_LOGI(TAG_HA_CLIENT, "Subscribed to global state_changed events");
     }
     cJSON_Delete(root);
     return err;
@@ -1674,6 +1898,13 @@ static void ha_client_import_state_object(cJSON *state_obj)
             }
         } else if (ha_client_entity_is_climate(model_state.entity_id)) {
             serialized = ha_client_serialize_climate_attrs_compact(
+                attributes, model_state.attributes_json, sizeof(model_state.attributes_json));
+            if (!serialized) {
+                snprintf(model_state.attributes_json, sizeof(model_state.attributes_json), "{}");
+                serialized = true;
+            }
+        } else if (ha_client_entity_is_media_player(model_state.entity_id)) {
+            serialized = ha_client_serialize_media_player_attrs_compact(
                 attributes, model_state.attributes_json, sizeof(model_state.attributes_json));
             if (!serialized) {
                 snprintf(model_state.attributes_json, sizeof(model_state.attributes_json), "{}");
@@ -2210,12 +2441,16 @@ static void ha_client_task(void *arg)
                     authenticated = false;
                 }
 
-                esp_err_t recover_err = wifi_mgr_force_reconnect();
+                bool used_transport_recover = false;
+                esp_err_t recover_err =
+                    ha_client_force_recover_with_escalation(false, "wifi-link-down", &used_transport_recover);
                 if (recover_err == ESP_OK) {
-                    ESP_LOGW(TAG_HA_CLIENT, "Forced Wi-Fi recover after %" PRId64 " ms of link-down state",
+                    ESP_LOGW(TAG_HA_CLIENT,
+                        "Forced %s recover after %" PRId64 " ms of link-down state",
+                        used_transport_recover ? "C6 transport" : "Wi-Fi",
                         (now_ms - wifi_down_since_ms));
                 } else {
-                    ESP_LOGW(TAG_HA_CLIENT, "Failed to force Wi-Fi recover: %s", esp_err_to_name(recover_err));
+                    ESP_LOGW(TAG_HA_CLIENT, "Failed to force network recover: %s", esp_err_to_name(recover_err));
                 }
                 last_wifi_force_recover_ms = now_ms;
                 wifi_down_since_ms = now_ms;
@@ -2226,13 +2461,27 @@ static void ha_client_task(void *arg)
 
         if (wifi_up && wifi_seen_connected_once && pending_force_wifi_recover &&
             (now_ms - last_wifi_force_recover_ms) >= HA_WIFI_FORCE_RECOVER_COOLDOWN_MS) {
-            esp_err_t recover_err = wifi_mgr_force_reconnect();
+            bool prefer_transport_recover =
+                ws_short_session_strikes >= HA_WS_SHORT_SESSION_STRIKES_TO_TRANSPORT_RECOVER;
+            bool used_transport_recover = false;
+            esp_err_t recover_err = ha_client_force_recover_with_escalation(
+                prefer_transport_recover, "ws-short-session-strikes", &used_transport_recover);
             if (recover_err == ESP_OK) {
-                ESP_LOGW(TAG_HA_CLIENT,
-                    "Forced Wi-Fi recover due to repeated short WS sessions (strike=%u/%u)",
-                    (unsigned)ws_short_session_strikes, (unsigned)HA_WS_SHORT_SESSION_STRIKES_TO_WIFI_RECOVER);
+                if (used_transport_recover) {
+                    ESP_LOGW(TAG_HA_CLIENT,
+                        "Forced C6 transport recover due to repeated short WS sessions (strike=%u/%u)",
+                        (unsigned)ws_short_session_strikes,
+                        (unsigned)HA_WS_SHORT_SESSION_STRIKES_TO_TRANSPORT_RECOVER);
+                } else {
+                    ESP_LOGW(TAG_HA_CLIENT,
+                        "Forced Wi-Fi recover due to repeated short WS sessions (strike=%u/%u)",
+                        (unsigned)ws_short_session_strikes,
+                        (unsigned)HA_WS_SHORT_SESSION_STRIKES_TO_WIFI_RECOVER);
+                }
             } else {
-                ESP_LOGW(TAG_HA_CLIENT, "Failed forced Wi-Fi recover on WS short-session strikes: %s",
+                ESP_LOGW(TAG_HA_CLIENT,
+                    "Failed forced %s recover on WS short-session strikes: %s",
+                    prefer_transport_recover ? "C6 transport" : "Wi-Fi",
                     esp_err_to_name(recover_err));
             }
             last_wifi_force_recover_ms = now_ms;
@@ -2245,13 +2494,25 @@ static void ha_client_task(void *arg)
         if (wifi_up && wifi_seen_connected_once && !connected &&
             ws_error_streak >= HA_WS_ERROR_STREAK_WIFI_RECOVER_THRESHOLD &&
             (now_ms - last_wifi_force_recover_ms) >= HA_WIFI_FORCE_RECOVER_COOLDOWN_MS) {
-            esp_err_t recover_err = wifi_mgr_force_reconnect();
+            bool prefer_transport_recover =
+                ws_error_streak >= HA_WS_ERROR_STREAK_TRANSPORT_RECOVER_THRESHOLD;
+            bool used_transport_recover = false;
+            esp_err_t recover_err = ha_client_force_recover_with_escalation(
+                prefer_transport_recover, "ws-connect-error-streak", &used_transport_recover);
             if (recover_err == ESP_OK) {
-                ESP_LOGW(TAG_HA_CLIENT,
-                    "Forced Wi-Fi recover due to WS connect error streak=%u",
-                    (unsigned)ws_error_streak);
+                if (used_transport_recover) {
+                    ESP_LOGW(TAG_HA_CLIENT,
+                        "Forced C6 transport recover due to WS connect error streak=%u",
+                        (unsigned)ws_error_streak);
+                } else {
+                    ESP_LOGW(TAG_HA_CLIENT,
+                        "Forced Wi-Fi recover due to WS connect error streak=%u",
+                        (unsigned)ws_error_streak);
+                }
             } else {
-                ESP_LOGW(TAG_HA_CLIENT, "Failed forced Wi-Fi recover on WS connect errors: %s",
+                ESP_LOGW(TAG_HA_CLIENT,
+                    "Failed forced %s recover on WS connect errors: %s",
+                    prefer_transport_recover ? "C6 transport" : "Wi-Fi",
                     esp_err_to_name(recover_err));
             }
             last_wifi_force_recover_ms = now_ms;
@@ -2643,15 +2904,18 @@ esp_err_t ha_client_notify_layout_updated(void)
 
     int64_t now_ms = ha_client_now_ms();
     bool started = false;
+    bool scheduled_resync = false;
+    bool scheduled_resubscribe = false;
     xSemaphoreTake(s_client.mutex, portMAX_DELAY);
     started = s_client.started;
-    if (started) {
+    if (started && HA_USE_TRIGGER_SUBSCRIPTION) {
         s_client.initial_layout_sync_done = false;
         s_client.pending_initial_layout_sync = APP_HA_FETCH_INITIAL_STATES;
         s_client.initial_layout_sync_index = 0;
         s_client.initial_layout_sync_imported = 0;
         s_client.next_initial_layout_sync_unix_ms =
             APP_HA_FETCH_INITIAL_STATES ? (now_ms + 200) : 0;
+        scheduled_resync = APP_HA_FETCH_INITIAL_STATES;
 
         s_client.periodic_layout_sync_cursor = 0;
         s_client.next_periodic_layout_sync_unix_ms = now_ms + HA_PERIODIC_LAYOUT_SYNC_INTERVAL_MS;
@@ -2663,16 +2927,21 @@ esp_err_t ha_client_notify_layout_updated(void)
         s_client.next_priority_sync_unix_ms = now_ms;
         memset(s_client.service_traces, 0, sizeof(s_client.service_traces));
 
-        if (APP_HA_SUBSCRIBE_STATE_CHANGED) {
+        if (APP_HA_SUBSCRIBE_STATE_CHANGED && HA_USE_TRIGGER_SUBSCRIPTION) {
             s_client.pending_subscribe = true;
             s_client.sub_state_via_trigger = false;
             s_client.trigger_sub_req_id = 0;
+            scheduled_resubscribe = true;
         }
     }
     xSemaphoreGive(s_client.mutex);
 
     if (started) {
-        ESP_LOGI(TAG_HA_CLIENT, "Layout updated: scheduled immediate HA resubscribe/resync");
+        if (scheduled_resubscribe || scheduled_resync) {
+            ESP_LOGI(TAG_HA_CLIENT, "Layout updated: scheduled immediate HA resubscribe/resync");
+        } else {
+            ESP_LOGI(TAG_HA_CLIENT, "Layout updated: keeping active global state_changed subscription");
+        }
     }
     return ESP_OK;
 }
@@ -2707,6 +2976,15 @@ esp_err_t ha_client_call_service(const char *domain, const char *service, const 
 {
     if (domain == NULL || service == NULL || domain[0] == '\0' || service[0] == '\0') {
         return ESP_ERR_INVALID_ARG;
+    }
+    const bool prefer_http = (strcmp(domain, "media_player") == 0 && strcmp(service, "volume_set") == 0);
+    if (prefer_http) {
+        esp_err_t http_err = ha_client_call_service_http(domain, service, json_service_data);
+        if (http_err == ESP_OK) {
+            return ESP_OK;
+        }
+        ESP_LOGW(TAG_HA_CLIENT, "HTTP service call %s.%s failed (%s), falling back to WS",
+            domain, service, esp_err_to_name(http_err));
     }
     if (!ha_client_is_connected()) {
         return ESP_ERR_INVALID_STATE;
