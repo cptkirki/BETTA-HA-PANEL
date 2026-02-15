@@ -14,15 +14,73 @@ typedef struct {
     lv_obj_t *title_label;
     lv_obj_t *state_label;
     lv_obj_t *action_switch;
+    lv_color_t accent_color;
     bool suppress_event;
     bool is_on;
     bool unavailable;
 } w_button_ctx_t;
 
 static const uint32_t W_BUTTON_SWITCH_TRACK_OFF_HEX = 0x3A3E43;
-static const uint32_t W_BUTTON_SWITCH_TRACK_ON_HEX = APP_UI_COLOR_NAV_TAB_ACTIVE;
+static const uint32_t W_BUTTON_SWITCH_ACCENT_DEFAULT_HEX = APP_UI_COLOR_NAV_TAB_ACTIVE;
 static const uint32_t W_BUTTON_SWITCH_KNOB_HEX = 0xEAF2FA;
 static const lv_coord_t W_BUTTON_SWITCH_HEIGHT_PX = 40;
+
+static bool button_is_hex_digit(char c)
+{
+    return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F');
+}
+
+static int button_hex_nibble(char c)
+{
+    if (c >= '0' && c <= '9') {
+        return c - '0';
+    }
+    if (c >= 'a' && c <= 'f') {
+        return 10 + (c - 'a');
+    }
+    if (c >= 'A' && c <= 'F') {
+        return 10 + (c - 'A');
+    }
+    return -1;
+}
+
+static bool button_parse_hex_color(const char *text, lv_color_t *out)
+{
+    if (text == NULL || out == NULL || text[0] == '\0') {
+        return false;
+    }
+
+    const char *p = text;
+    if (p[0] == '#') {
+        p++;
+    } else if (p[0] == '0' && (p[1] == 'x' || p[1] == 'X')) {
+        p += 2;
+    }
+
+    if (strlen(p) != 6) {
+        return false;
+    }
+    for (size_t i = 0; i < 6; i++) {
+        if (!button_is_hex_digit(p[i])) {
+            return false;
+        }
+    }
+
+    int r_hi = button_hex_nibble(p[0]);
+    int r_lo = button_hex_nibble(p[1]);
+    int g_hi = button_hex_nibble(p[2]);
+    int g_lo = button_hex_nibble(p[3]);
+    int b_hi = button_hex_nibble(p[4]);
+    int b_lo = button_hex_nibble(p[5]);
+    if (r_hi < 0 || r_lo < 0 || g_hi < 0 || g_lo < 0 || b_hi < 0 || b_lo < 0) {
+        return false;
+    }
+
+    uint32_t rgb = (uint32_t)(((r_hi << 4) | r_lo) << 16) | (uint32_t)(((g_hi << 4) | g_lo) << 8) |
+                   (uint32_t)((b_hi << 4) | b_lo);
+    *out = lv_color_hex(rgb);
+    return true;
+}
 
 static bool state_is_on(const char *state)
 {
@@ -170,7 +228,7 @@ static void button_apply_visual(lv_obj_t *card, w_button_ctx_t *ctx, bool is_on,
     const lv_color_t track_off =
         unavailable ? lv_color_hex(APP_UI_COLOR_CARD_BORDER) : lv_color_hex(W_BUTTON_SWITCH_TRACK_OFF_HEX);
     const lv_color_t track_on =
-        unavailable ? lv_color_hex(APP_UI_COLOR_CARD_BORDER) : lv_color_hex(W_BUTTON_SWITCH_TRACK_ON_HEX);
+        unavailable ? lv_color_hex(APP_UI_COLOR_CARD_BORDER) : ctx->accent_color;
     const lv_color_t knob_color =
         unavailable ? lv_color_hex(APP_UI_COLOR_TEXT_MUTED) : lv_color_hex(W_BUTTON_SWITCH_KNOB_HEX);
 
@@ -309,9 +367,15 @@ esp_err_t w_button_create(const ui_widget_def_t *def, lv_obj_t *parent, ui_widge
     ctx->title_label = title;
     ctx->state_label = state_label;
     ctx->action_switch = action_switch;
+    ctx->accent_color = lv_color_hex(W_BUTTON_SWITCH_ACCENT_DEFAULT_HEX);
     ctx->suppress_event = false;
     ctx->is_on = false;
     ctx->unavailable = false;
+
+    lv_color_t parsed_color = lv_color_hex(0);
+    if (button_parse_hex_color(def->button_accent_color, &parsed_color)) {
+        ctx->accent_color = parsed_color;
+    }
 
     lv_obj_add_event_cb(card, w_button_card_event_cb, LV_EVENT_CLICKED, ctx);
     lv_obj_add_event_cb(card, w_button_card_event_cb, LV_EVENT_DELETE, ctx);

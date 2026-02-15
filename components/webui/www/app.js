@@ -3,6 +3,7 @@ const CANVAS_WIDTH = 720;
 const CANVAS_HEIGHT = 600;
 const MIN_WIDGET_SIZE = 60;
 const DEFAULT_SLIDER_DIRECTION = "auto";
+const DEFAULT_BUTTON_ACCENT_COLOR = "#6fe8ff";
 const DEFAULT_SLIDER_ACCENT_COLOR = "#6fe8ff";
 const DEFAULT_GRAPH_LINE_COLOR = "#6fe8ff";
 const DEFAULT_GRAPH_TIME_WINDOW_MIN = 120;
@@ -124,6 +125,8 @@ const el = {
   fEntity: document.getElementById("fEntity"),
   fSecondaryEntityWrap: document.getElementById("fSecondaryEntityWrap"),
   fSecondaryEntity: document.getElementById("fSecondaryEntity"),
+  buttonOptions: document.getElementById("buttonOptions"),
+  fButtonAccentColor: document.getElementById("fButtonAccentColor"),
   sliderOptions: document.getElementById("sliderOptions"),
   fSliderDirection: document.getElementById("fSliderDirection"),
   fSliderAccentColor: document.getElementById("fSliderAccentColor"),
@@ -204,6 +207,9 @@ function normalizeLayoutWidgets(layout) {
     if (!page || !Array.isArray(page.widgets)) continue;
     for (const widget of page.widgets) {
       if (!widget || typeof widget !== "object") continue;
+      if (widget.type === "button") {
+        widget.button_accent_color = normalizeHexColor(widget.button_accent_color, DEFAULT_BUTTON_ACCENT_COLOR);
+      }
       if (widget.type === "slider") {
         widget.slider_direction = normalizeSliderDirection(widget.slider_direction);
         widget.slider_accent_color = normalizeHexColor(widget.slider_accent_color, DEFAULT_SLIDER_ACCENT_COLOR);
@@ -851,6 +857,9 @@ function renderInspector() {
     el.fY.value = "";
     el.fW.value = "";
     el.fH.value = "";
+    if (el.buttonOptions) {
+      el.buttonOptions.classList.add("hidden");
+    }
     if (el.sliderOptions) {
       el.sliderOptions.classList.add("hidden");
     }
@@ -859,6 +868,9 @@ function renderInspector() {
     }
     if (el.fSliderDirection) {
       el.fSliderDirection.value = DEFAULT_SLIDER_DIRECTION;
+    }
+    if (el.fButtonAccentColor) {
+      el.fButtonAccentColor.value = DEFAULT_BUTTON_ACCENT_COLOR;
     }
     if (el.fSliderAccentColor) {
       el.fSliderAccentColor.value = DEFAULT_SLIDER_ACCENT_COLOR;
@@ -885,13 +897,28 @@ function renderInspector() {
   el.fW.value = widget.rect.w;
   el.fH.value = widget.rect.h;
 
+  const isButton = widget.type === "button";
   const isSlider = widget.type === "slider";
   const isGraph = widget.type === "graph";
+  if (el.buttonOptions) {
+    el.buttonOptions.classList.toggle("hidden", !isButton);
+  }
   if (el.sliderOptions) {
     el.sliderOptions.classList.toggle("hidden", !isSlider);
   }
   if (el.graphOptions) {
     el.graphOptions.classList.toggle("hidden", !isGraph);
+  }
+  if (isButton) {
+    const accent = normalizeHexColor(widget.button_accent_color, DEFAULT_BUTTON_ACCENT_COLOR);
+    widget.button_accent_color = accent;
+    if (el.fButtonAccentColor) {
+      el.fButtonAccentColor.value = accent;
+    }
+  } else {
+    if (el.fButtonAccentColor) {
+      el.fButtonAccentColor.value = DEFAULT_BUTTON_ACCENT_COLOR;
+    }
   }
   if (isSlider) {
     const direction = normalizeSliderDirection(widget.slider_direction);
@@ -1012,6 +1039,9 @@ function addWidget(type) {
     widget.slider_direction = DEFAULT_SLIDER_DIRECTION;
     widget.slider_accent_color = DEFAULT_SLIDER_ACCENT_COLOR;
   }
+  if (type === "button") {
+    widget.button_accent_color = DEFAULT_BUTTON_ACCENT_COLOR;
+  }
   if (type === "graph") {
     widget.graph_line_color = DEFAULT_GRAPH_LINE_COLOR;
     widget.graph_time_window_min = DEFAULT_GRAPH_TIME_WINDOW_MIN;
@@ -1049,6 +1079,11 @@ function applyInspector() {
     widget.secondary_entity_id = el.fSecondaryEntity.value.trim() || pickDefaultEntityForWidgetType("sensor");
   } else {
     widget.secondary_entity_id = "";
+  }
+  if (widget.type === "button") {
+    widget.button_accent_color = normalizeHexColor(el.fButtonAccentColor?.value, DEFAULT_BUTTON_ACCENT_COLOR);
+  } else {
+    delete widget.button_accent_color;
   }
   if (widget.type === "slider") {
     widget.slider_direction = normalizeSliderDirection(el.fSliderDirection?.value);
@@ -1157,11 +1192,23 @@ function bindUi() {
   el.applyInspectorBtn.onclick = applyInspector;
   el.reloadBtn.onclick = () => loadLayout();
   el.fType.onchange = () => {
+    if (el.buttonOptions) {
+      el.buttonOptions.classList.toggle("hidden", el.fType.value !== "button");
+    }
     if (el.sliderOptions) {
       el.sliderOptions.classList.toggle("hidden", el.fType.value !== "slider");
     }
     if (el.graphOptions) {
       el.graphOptions.classList.toggle("hidden", el.fType.value !== "graph");
+    }
+    if (el.fType.value === "button") {
+      if (el.fButtonAccentColor) {
+        el.fButtonAccentColor.value = normalizeHexColor(el.fButtonAccentColor.value, DEFAULT_BUTTON_ACCENT_COLOR);
+      }
+    } else {
+      if (el.fButtonAccentColor) {
+        el.fButtonAccentColor.value = DEFAULT_BUTTON_ACCENT_COLOR;
+      }
     }
     if (el.fType.value === "slider") {
       if (el.fSliderDirection) {

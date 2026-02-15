@@ -255,6 +255,7 @@ static bool validate_widget(cJSON *widget, const char *known_widget_ids, size_t 
     cJSON *secondary_entity_id = cJSON_GetObjectItemCaseSensitive(widget, "secondary_entity_id");
     cJSON *slider_direction = cJSON_GetObjectItemCaseSensitive(widget, "slider_direction");
     cJSON *slider_accent_color = cJSON_GetObjectItemCaseSensitive(widget, "slider_accent_color");
+    cJSON *button_accent_color = cJSON_GetObjectItemCaseSensitive(widget, "button_accent_color");
     cJSON *graph_line_color = cJSON_GetObjectItemCaseSensitive(widget, "graph_line_color");
     cJSON *graph_point_count = cJSON_GetObjectItemCaseSensitive(widget, "graph_point_count");
     cJSON *graph_time_window_min = cJSON_GetObjectItemCaseSensitive(widget, "graph_time_window_min");
@@ -325,6 +326,17 @@ static bool validate_widget(cJSON *widget, const char *known_widget_ids, size_t 
             if (!cJSON_IsString(slider_accent_color) || slider_accent_color->valuestring == NULL ||
                 !is_valid_hex_rgb_color(slider_accent_color->valuestring)) {
                 snprintf(msg, sizeof(msg), "widget %s: slider_accent_color must be hex RGB",
+                    cJSON_IsString(id) ? id->valuestring : "?");
+                layout_validation_add(result, msg);
+            }
+        }
+    }
+
+    if (cJSON_IsString(type) && type->valuestring != NULL && strcmp(type->valuestring, "button") == 0) {
+        if (button_accent_color != NULL) {
+            if (!cJSON_IsString(button_accent_color) || button_accent_color->valuestring == NULL ||
+                !is_valid_hex_rgb_color(button_accent_color->valuestring)) {
+                snprintf(msg, sizeof(msg), "widget %s: button_accent_color must be hex RGB",
                     cJSON_IsString(id) ? id->valuestring : "?");
                 layout_validation_add(result, msg);
             }

@@ -249,6 +249,7 @@ static bool ui_runtime_widget_from_json(cJSON *widget_json, ui_widget_def_t *out
     cJSON *secondary_entity_id = cJSON_GetObjectItemCaseSensitive(widget_json, "secondary_entity_id");
     cJSON *slider_direction = cJSON_GetObjectItemCaseSensitive(widget_json, "slider_direction");
     cJSON *slider_accent_color = cJSON_GetObjectItemCaseSensitive(widget_json, "slider_accent_color");
+    cJSON *button_accent_color = cJSON_GetObjectItemCaseSensitive(widget_json, "button_accent_color");
     cJSON *graph_line_color = cJSON_GetObjectItemCaseSensitive(widget_json, "graph_line_color");
     cJSON *graph_point_count = cJSON_GetObjectItemCaseSensitive(widget_json, "graph_point_count");
     cJSON *graph_time_window_min = cJSON_GetObjectItemCaseSensitive(widget_json, "graph_time_window_min");
@@ -278,6 +279,9 @@ static bool ui_runtime_widget_from_json(cJSON *widget_json, ui_widget_def_t *out
     }
     if (cJSON_IsString(slider_accent_color) && slider_accent_color->valuestring != NULL) {
         snprintf(out->slider_accent_color, sizeof(out->slider_accent_color), "%s", slider_accent_color->valuestring);
+    }
+    if (cJSON_IsString(button_accent_color) && button_accent_color->valuestring != NULL) {
+        snprintf(out->button_accent_color, sizeof(out->button_accent_color), "%s", button_accent_color->valuestring);
     }
     if (cJSON_IsString(graph_line_color) && graph_line_color->valuestring != NULL) {
         snprintf(out->graph_line_color, sizeof(out->graph_line_color), "%s", graph_line_color->valuestring);

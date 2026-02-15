@@ -1658,7 +1658,19 @@ static void weather_set_3day_rows_layout(lv_obj_t *card, w_weather_tile_ctx_t *c
         x += low_w + gap;
 
         lv_coord_t track_h = (row_h >= 24) ? 14 : 12;
-        lv_coord_t track_y = (row_h - track_h) / 2;
+        const lv_font_t *text_font = lv_obj_get_style_text_font(row->low_label, LV_PART_MAIN);
+        if (text_font == NULL) {
+            text_font = WEATHER_3DAY_META_FONT;
+        }
+        lv_coord_t text_h = (text_font != NULL) ? (lv_coord_t)lv_font_get_line_height(text_font) : row_h;
+        lv_coord_t track_y = (text_h - track_h) / 2;
+        if (track_y < 0) {
+            track_y = 0;
+        }
+        lv_coord_t max_track_y = row_h - track_h;
+        if (track_y > max_track_y) {
+            track_y = max_track_y;
+        }
         lv_obj_set_pos(row->bar_track, x, track_y);
         lv_obj_set_size(row->bar_track, bar_w, track_h);
         x += bar_w + gap;
@@ -1970,7 +1982,6 @@ static void weather_render_3day(lv_obj_t *card, w_weather_tile_ctx_t *ctx, const
     lv_obj_set_pos(ctx->temp_label, 16, 58);
     lv_obj_set_pos(ctx->meta_label, 16, 102);
 
-    weather_set_3day_rows_layout(card, ctx);
     for (int i = 0; i < WEATHER_3DAY_ROWS; i++) {
         weather_3day_row_widgets_t *row = &ctx->rows[i];
         if (row->container == NULL) {
@@ -2013,6 +2024,7 @@ static void weather_render_3day(lv_obj_t *card, w_weather_tile_ctx_t *ctx, const
         lv_obj_set_style_border_color(row->bar_marker, lv_color_hex(WEATHER_3DAY_MARKER_RING), LV_PART_MAIN);
         lv_obj_set_style_radius(row->bar_marker, LV_RADIUS_CIRCLE, LV_PART_MAIN);
     }
+    weather_set_3day_rows_layout(card, ctx);
 
     if (!available || values == NULL) {
         lv_obj_clear_flag(ctx->condition_label, LV_OBJ_FLAG_HIDDEN);
