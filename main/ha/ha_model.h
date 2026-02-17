@@ -30,6 +30,7 @@ void ha_model_reset(void);
 esp_err_t ha_model_upsert_entity(const ha_entity_info_t *entity);
 esp_err_t ha_model_upsert_state(const ha_state_t *state);
 bool ha_model_get_state(const char *entity_id, ha_state_t *out_state);
+uint32_t ha_model_state_revision(void);
 size_t ha_model_list_entities(
     const char *domain_filter, const char *search, ha_entity_info_t *out_entities, size_t max_out);
 size_t ha_model_list_states(ha_state_t *out_states, size_t max_out);

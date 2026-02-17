@@ -68,13 +68,51 @@ idf_component_register(
 
 set(APP_HAVE_HOSTED_C6_FW_IMAGE 0)
 set(HOSTED_C6_FW_BIN "")
-set(HOSTED_C6_FW_BIN_EXACT
-    "${CMAKE_CURRENT_LIST_DIR}/../managed_components/espressif__esp_hosted/examples/host_performs_slave_ota/components/ota_partition/slave_fw_bin/network_adapter_2.11.7.bin")
-if(EXISTS "${HOSTED_C6_FW_BIN_EXACT}")
-    set(HOSTED_C6_FW_BIN "${HOSTED_C6_FW_BIN_EXACT}")
+set(HOSTED_C6_FW_BIN_DIR
+    "${CMAKE_CURRENT_LIST_DIR}/../managed_components/espressif__esp_hosted/examples/host_performs_slave_ota/components/ota_partition/slave_fw_bin")
+set(HOSTED_C6_FW_EMBED_DIR "${CMAKE_CURRENT_BINARY_DIR}/hosted_c6_fw")
+file(MAKE_DIRECTORY "${HOSTED_C6_FW_EMBED_DIR}")
+
+set(HOSTED_C6_HOST_VERSION_FILE
+    "${CMAKE_CURRENT_LIST_DIR}/../managed_components/espressif__esp_hosted/host/esp_hosted_host_fw_ver.h")
+set(HOSTED_C6_EXPECTED_VERSION "unknown")
+if(EXISTS "${HOSTED_C6_HOST_VERSION_FILE}")
+    file(READ "${HOSTED_C6_HOST_VERSION_FILE}" HOSTED_C6_HOST_VERSION_TEXT)
+    string(REGEX MATCH "#define[ \t]+ESP_HOSTED_VERSION_MAJOR_1[ \t]+([0-9]+)"
+        _HOSTED_C6_MAJOR_MATCH "${HOSTED_C6_HOST_VERSION_TEXT}")
+    set(HOSTED_C6_VER_MAJOR "${CMAKE_MATCH_1}")
+    string(REGEX MATCH "#define[ \t]+ESP_HOSTED_VERSION_MINOR_1[ \t]+([0-9]+)"
+        _HOSTED_C6_MINOR_MATCH "${HOSTED_C6_HOST_VERSION_TEXT}")
+    set(HOSTED_C6_VER_MINOR "${CMAKE_MATCH_1}")
+    string(REGEX MATCH "#define[ \t]+ESP_HOSTED_VERSION_PATCH_1[ \t]+([0-9]+)"
+        _HOSTED_C6_PATCH_MATCH "${HOSTED_C6_HOST_VERSION_TEXT}")
+    set(HOSTED_C6_VER_PATCH "${CMAKE_MATCH_1}")
+    if(NOT HOSTED_C6_VER_MAJOR STREQUAL "" AND
+       NOT HOSTED_C6_VER_MINOR STREQUAL "" AND
+       NOT HOSTED_C6_VER_PATCH STREQUAL "")
+        set(HOSTED_C6_EXPECTED_VERSION
+            "${HOSTED_C6_VER_MAJOR}.${HOSTED_C6_VER_MINOR}.${HOSTED_C6_VER_PATCH}")
+    endif()
+endif()
+
+set(HOSTED_C6_FW_BIN_MANUAL "${HOSTED_C6_FW_BIN_DIR}/network_adapter.bin")
+if(NOT HOSTED_C6_EXPECTED_VERSION STREQUAL "unknown")
+    set(HOSTED_C6_FW_BIN_EXPECTED
+        "${HOSTED_C6_FW_BIN_DIR}/network_adapter_${HOSTED_C6_EXPECTED_VERSION}.bin")
+endif()
+set(HOSTED_C6_FW_BIN_LOCAL_BUILD "${CMAKE_SOURCE_DIR}/build_c6/network_adapter.bin")
+
+if(EXISTS "${HOSTED_C6_FW_BIN_MANUAL}")
+    set(HOSTED_C6_FW_BIN "${HOSTED_C6_FW_BIN_MANUAL}")
+elseif(DEFINED HOSTED_C6_FW_BIN_EXPECTED AND EXISTS "${HOSTED_C6_FW_BIN_EXPECTED}")
+    set(HOSTED_C6_FW_BIN "${HOSTED_C6_FW_BIN_EXPECTED}")
+elseif(EXISTS "${HOSTED_C6_FW_BIN_LOCAL_BUILD}")
+    set(HOSTED_C6_FW_BIN "${HOSTED_C6_FW_BIN_LOCAL_BUILD}")
 else()
-    file(GLOB HOSTED_C6_FW_BIN_CANDIDATES
-        "${CMAKE_CURRENT_LIST_DIR}/../managed_components/espressif__esp_hosted/examples/host_performs_slave_ota/components/ota_partition/slave_fw_bin/network_adapter_*.bin")
+    file(GLOB HOSTED_C6_FW_BIN_CANDIDATES "${HOSTED_C6_FW_BIN_DIR}/*.bin")
+    # ESP-Hosted 2.11.7 currently has a known managed-component packaging issue.
+    # Keep fallback selection away from that image until upstream fix is available.
+    list(FILTER HOSTED_C6_FW_BIN_CANDIDATES EXCLUDE REGEX "network_adapter_2\\.11\\.7\\.bin$")
     list(LENGTH HOSTED_C6_FW_BIN_CANDIDATES HOSTED_C6_FW_BIN_COUNT)
     if(HOSTED_C6_FW_BIN_COUNT GREATER 0)
         list(SORT HOSTED_C6_FW_BIN_CANDIDATES ORDER DESCENDING)
@@ -82,14 +120,69 @@ else()
     endif()
 endif()
 
+# If no firmware image is available yet, auto-build the C6 network_adapter once and cache it.
+if(NOT HOSTED_C6_FW_BIN AND CONFIG_ESP_HOSTED_ENABLED)
+    set(HOSTED_C6_SLAVE_PROJECT_DIR
+        "${CMAKE_CURRENT_LIST_DIR}/../managed_components/espressif__esp_hosted/slave")
+    set(HOSTED_C6_SLAVE_BUILD_DIR "${CMAKE_SOURCE_DIR}/build_c6")
+    set(HOSTED_C6_SLAVE_BIN "${HOSTED_C6_SLAVE_BUILD_DIR}/network_adapter.bin")
+    if(EXISTS "${HOSTED_C6_SLAVE_PROJECT_DIR}/CMakeLists.txt")
+        idf_build_get_property(PYTHON PYTHON)
+        set(HOSTED_C6_IDF_PY "$ENV{IDF_PATH}/tools/idf.py")
+        if(PYTHON AND EXISTS "${HOSTED_C6_IDF_PY}")
+            message(STATUS
+                "Auto-building ESP-Hosted C6 firmware from ${HOSTED_C6_SLAVE_PROJECT_DIR} (target=esp32c6)")
+            execute_process(
+                COMMAND "${CMAKE_COMMAND}" -E env
+                    "IDF_TARGET=esp32c6"
+                    "${PYTHON}" "${HOSTED_C6_IDF_PY}"
+                    -C "${HOSTED_C6_SLAVE_PROJECT_DIR}"
+                    -B "${HOSTED_C6_SLAVE_BUILD_DIR}"
+                    -DIDF_TARGET=esp32c6
+                    build
+                RESULT_VARIABLE HOSTED_C6_BUILD_RESULT
+                OUTPUT_VARIABLE HOSTED_C6_BUILD_OUTPUT
+                ERROR_VARIABLE HOSTED_C6_BUILD_ERROR
+                OUTPUT_STRIP_TRAILING_WHITESPACE
+                ERROR_STRIP_TRAILING_WHITESPACE
+            )
+            if(HOSTED_C6_BUILD_RESULT EQUAL 0 AND EXISTS "${HOSTED_C6_SLAVE_BIN}")
+                file(MAKE_DIRECTORY "${HOSTED_C6_FW_BIN_DIR}")
+                if(HOSTED_C6_EXPECTED_VERSION STREQUAL "unknown")
+                    set(HOSTED_C6_FW_BIN_AUTO "${HOSTED_C6_FW_BIN_DIR}/network_adapter_autobuild.bin")
+                else()
+                    set(HOSTED_C6_FW_BIN_AUTO
+                        "${HOSTED_C6_FW_BIN_DIR}/network_adapter_${HOSTED_C6_EXPECTED_VERSION}.bin")
+                endif()
+                configure_file("${HOSTED_C6_SLAVE_BIN}" "${HOSTED_C6_FW_BIN_AUTO}" COPYONLY)
+                set(HOSTED_C6_FW_BIN "${HOSTED_C6_FW_BIN_AUTO}")
+                message(STATUS "Auto-built and cached ESP-Hosted C6 firmware image: ${HOSTED_C6_FW_BIN_AUTO}")
+            else()
+                message(WARNING
+                    "Automatic C6 firmware build failed (result=${HOSTED_C6_BUILD_RESULT}). "
+                    "Runtime C6 auto-update will be skipped unless a firmware .bin is provided manually.")
+                if(HOSTED_C6_BUILD_ERROR)
+                    message(WARNING "C6 build stderr: ${HOSTED_C6_BUILD_ERROR}")
+                endif()
+            endif()
+        else()
+            message(WARNING
+                "Cannot auto-build C6 firmware: idf.py or python path is unavailable in CMake context.")
+        endif()
+    endif()
+endif()
+
 if(HOSTED_C6_FW_BIN)
-    set(HOSTED_C6_FW_EMBED "${CMAKE_CURRENT_BINARY_DIR}/hosted_c6_fw.bin")
+    set(HOSTED_C6_FW_EMBED "${HOSTED_C6_FW_EMBED_DIR}/hosted_c6_fw.bin")
     configure_file("${HOSTED_C6_FW_BIN}" "${HOSTED_C6_FW_EMBED}" COPYONLY)
     target_add_binary_data(${COMPONENT_LIB} "${HOSTED_C6_FW_EMBED}" BINARY)
     set(APP_HAVE_HOSTED_C6_FW_IMAGE 1)
     message(STATUS "Embedding ESP-Hosted C6 firmware image: ${HOSTED_C6_FW_BIN}")
 else()
-    message(WARNING "No ESP-Hosted C6 firmware image found; runtime C6 auto-update will be skipped")
+    message(WARNING
+        "No ESP-Hosted C6 firmware image found in ${HOSTED_C6_FW_BIN_DIR}; "
+        "runtime C6 auto-update will be skipped. "
+        "Either provide network_adapter.bin there or allow auto-build to succeed.")
 endif()
 
 target_compile_definitions(${COMPONENT_LIB} PRIVATE APP_HAVE_HOSTED_C6_FW_IMAGE=${APP_HAVE_HOSTED_C6_FW_IMAGE})

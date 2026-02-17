@@ -1,5 +1,6 @@
 #include "api/api_routes.h"
 
+#include <ctype.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -51,6 +52,28 @@ static bool has_ws_scheme(const char *url)
         return true;
     }
     return strncmp(url, "ws://", 5) == 0 || strncmp(url, "wss://", 6) == 0;
+}
+
+static bool normalize_country_code(char *country_code, size_t country_code_len)
+{
+    if (country_code == NULL || country_code_len < APP_WIFI_COUNTRY_CODE_MAX_LEN) {
+        return false;
+    }
+    if (country_code[0] == '\0') {
+        strlcpy(country_code, APP_WIFI_COUNTRY_CODE, country_code_len);
+        return true;
+    }
+    if (strlen(country_code) != 2) {
+        return false;
+    }
+    if (!isalpha((unsigned char)country_code[0]) || !isalpha((unsigned char)country_code[1])) {
+        return false;
+    }
+
+    country_code[0] = (char)toupper((unsigned char)country_code[0]);
+    country_code[1] = (char)toupper((unsigned char)country_code[1]);
+    country_code[2] = '\0';
+    return true;
 }
 
 static void restart_timer_cb(void *arg)
@@ -111,6 +134,7 @@ esp_err_t api_settings_get_handler(httpd_req_t *req)
     }
 
     cJSON_AddStringToObject(wifi, "ssid", settings->wifi_ssid);
+    cJSON_AddStringToObject(wifi, "country_code", settings->wifi_country_code);
     cJSON_AddBoolToObject(wifi, "password_set", settings->wifi_password[0] != '\0');
     cJSON_AddBoolToObject(wifi, "configured", runtime_settings_has_wifi(settings));
     cJSON_AddBoolToObject(wifi, "connected", wifi_mgr_is_connected());
@@ -121,6 +145,7 @@ esp_err_t api_settings_get_handler(httpd_req_t *req)
 
     cJSON_AddStringToObject(ha, "ws_url", settings->ha_ws_url);
     cJSON_AddBoolToObject(ha, "access_token_set", settings->ha_access_token[0] != '\0');
+    cJSON_AddBoolToObject(ha, "rest_enabled", settings->ha_rest_enabled);
     cJSON_AddBoolToObject(ha, "configured", runtime_settings_has_ha(settings));
     cJSON_AddBoolToObject(ha, "connected", ha_client_is_connected());
     cJSON_AddItemToObject(root, "ha", ha);
@@ -169,6 +194,24 @@ static bool update_string_setting(
     }
     if (cJSON_IsNull(item)) {
         dst[0] = '\0';
+        return true;
+    }
+
+    if (out_invalid_type != NULL) {
+        *out_invalid_type = true;
+    }
+    return false;
+}
+
+static bool update_bool_setting(cJSON *obj, const char *key, bool *dst, bool *out_invalid_type)
+{
+    cJSON *item = cJSON_GetObjectItemCaseSensitive(obj, key);
+    if (item == NULL) {
+        return false;
+    }
+
+    if (cJSON_IsBool(item)) {
+        *dst = cJSON_IsTrue(item);
         return true;
     }
 
@@ -243,12 +286,15 @@ esp_err_t api_settings_put_handler(httpd_req_t *req)
             wifi, "ssid", settings->wifi_ssid, sizeof(settings->wifi_ssid), &invalid_type, &too_long);
         (void)update_string_setting(
             wifi, "password", settings->wifi_password, sizeof(settings->wifi_password), &invalid_type, &too_long);
+        (void)update_string_setting(
+            wifi, "country_code", settings->wifi_country_code, sizeof(settings->wifi_country_code), &invalid_type, &too_long);
     }
     if (cJSON_IsObject(ha)) {
         (void)update_string_setting(
             ha, "ws_url", settings->ha_ws_url, sizeof(settings->ha_ws_url), &invalid_type, &too_long);
         (void)update_string_setting(
             ha, "access_token", settings->ha_access_token, sizeof(settings->ha_access_token), &invalid_type, &too_long);
+        (void)update_bool_setting(ha, "rest_enabled", &settings->ha_rest_enabled, &invalid_type);
     }
     if (cJSON_IsObject(time_cfg)) {
         (void)update_string_setting(
@@ -262,9 +308,12 @@ esp_err_t api_settings_put_handler(httpd_req_t *req)
     (void)update_string_setting(
         root, "wifi_password", settings->wifi_password, sizeof(settings->wifi_password), &invalid_type, &too_long);
     (void)update_string_setting(
+        root, "wifi_country_code", settings->wifi_country_code, sizeof(settings->wifi_country_code), &invalid_type, &too_long);
+    (void)update_string_setting(
         root, "ha_ws_url", settings->ha_ws_url, sizeof(settings->ha_ws_url), &invalid_type, &too_long);
     (void)update_string_setting(
         root, "ha_access_token", settings->ha_access_token, sizeof(settings->ha_access_token), &invalid_type, &too_long);
+    (void)update_bool_setting(root, "ha_rest_enabled", &settings->ha_rest_enabled, &invalid_type);
     (void)update_string_setting(
         root, "ntp_server", settings->ntp_server, sizeof(settings->ntp_server), &invalid_type, &too_long);
     (void)update_string_setting(
@@ -293,11 +342,15 @@ esp_err_t api_settings_put_handler(httpd_req_t *req)
         return send_json_error(
             req,
             "400 Bad Request",
-            "One or more settings values are too long (ssid<=32, wifi_password<=64, ws_url<=255, token<=511, ntp<=127, timezone<=127)");
+            "One or more settings values are too long (ssid<=32, wifi_password<=64, country_code<=2, ws_url<=255, token<=511, ntp<=127, timezone<=127)");
     }
     if (!has_ws_scheme(settings->ha_ws_url)) {
         free(settings);
         return send_json_error(req, "400 Bad Request", "ha.ws_url must start with ws:// or wss://");
+    }
+    if (!normalize_country_code(settings->wifi_country_code, sizeof(settings->wifi_country_code))) {
+        free(settings);
+        return send_json_error(req, "400 Bad Request", "wifi.country_code must be a 2-letter ISO code (e.g. US, DE)");
     }
     if (settings->wifi_ssid[0] == '\0') {
         settings->wifi_password[0] = '\0';

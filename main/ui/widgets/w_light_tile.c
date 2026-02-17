@@ -16,6 +16,9 @@
 
 typedef struct {
     char entity_id[APP_MAX_ENTITY_ID_LEN];
+    bool is_on;
+    int brightness;
+    bool unavailable;
 } w_light_tile_ctx_t;
 
 #define ICON_CP_MDI_LIGHTBULB_ON 0xF06E8U
@@ -236,7 +239,37 @@ static void w_light_tile_card_event_cb(lv_event_t *event)
     }
 
     if (code == LV_EVENT_CLICKED) {
-        ui_bindings_toggle_entity(ctx->entity_id);
+        if (ctx->unavailable) {
+            return;
+        }
+
+        lv_obj_t *card = lv_event_get_target(event);
+        bool prev_is_on = ctx->is_on;
+        int prev_brightness = ctx->brightness;
+        bool prev_unavailable = ctx->unavailable;
+
+        bool next_is_on = !ctx->is_on;
+        int next_brightness = ctx->brightness;
+        if (next_is_on && next_brightness <= 0) {
+            next_brightness = 100;
+        }
+        if (next_brightness < 0) {
+            next_brightness = 0;
+        }
+
+        ctx->is_on = next_is_on;
+        ctx->brightness = clamp_percent(next_brightness);
+        ctx->unavailable = false;
+        light_apply_visual(card, ctx->is_on, ctx->brightness, ctx->is_on ? "ON" : "OFF");
+
+        esp_err_t err = ui_bindings_set_entity_power(ctx->entity_id, ctx->is_on);
+        if (err != ESP_OK) {
+            ctx->is_on = prev_is_on;
+            ctx->brightness = prev_brightness;
+            ctx->unavailable = prev_unavailable;
+            light_apply_visual(card, ctx->is_on, ctx->brightness, ctx->unavailable ? "unavailable" :
+                (ctx->is_on ? "ON" : "OFF"));
+        }
     } else if (code == LV_EVENT_DELETE) {
         free(ctx);
     }
@@ -256,12 +289,35 @@ static void w_light_tile_slider_event_cb(lv_event_t *event)
     int value = (slider != NULL) ? lv_slider_get_value(slider) : 0;
 
     if (code == LV_EVENT_VALUE_CHANGED) {
+        if (ctx != NULL) {
+            ctx->brightness = clamp_percent(value);
+        }
         light_set_value_label(value_label, value);
         return;
     }
 
     if (ctx != NULL) {
-        ui_bindings_set_slider_value(ctx->entity_id, value);
+        bool prev_is_on = ctx->is_on;
+        int prev_brightness = ctx->brightness;
+        bool prev_unavailable = ctx->unavailable;
+
+        ctx->brightness = clamp_percent(value);
+        ctx->is_on = (ctx->brightness > 0);
+        ctx->unavailable = false;
+        if (card != NULL) {
+            light_apply_visual(card, ctx->is_on, ctx->brightness, ctx->is_on ? "ON" : "OFF");
+        }
+
+        esp_err_t err = ui_bindings_set_slider_value(ctx->entity_id, value);
+        if (err != ESP_OK) {
+            ctx->is_on = prev_is_on;
+            ctx->brightness = prev_brightness;
+            ctx->unavailable = prev_unavailable;
+            if (card != NULL) {
+                light_apply_visual(card, ctx->is_on, ctx->brightness, ctx->unavailable ? "unavailable" :
+                    (ctx->is_on ? "ON" : "OFF"));
+            }
+        }
     }
 }
 
@@ -342,6 +398,9 @@ esp_err_t w_light_tile_create(const ui_widget_def_t *def, lv_obj_t *parent, ui_w
         return ESP_ERR_NO_MEM;
     }
     snprintf(ctx->entity_id, sizeof(ctx->entity_id), "%s", def->entity_id);
+    ctx->is_on = false;
+    ctx->brightness = 0;
+    ctx->unavailable = false;
 
     lv_obj_add_event_cb(card, w_light_tile_card_event_cb, LV_EVENT_CLICKED, ctx);
     lv_obj_add_event_cb(card, w_light_tile_card_event_cb, LV_EVENT_DELETE, ctx);
@@ -349,6 +408,7 @@ esp_err_t w_light_tile_create(const ui_widget_def_t *def, lv_obj_t *parent, ui_w
     lv_obj_add_event_cb(slider, w_light_tile_slider_event_cb, LV_EVENT_RELEASED, ctx);
 
     light_apply_visual(card, false, 0, "OFF");
+    out_instance->ctx = ctx;
     out_instance->obj = card;
     return ESP_OK;
 }
@@ -360,6 +420,12 @@ void w_light_tile_apply_state(ui_widget_instance_t *instance, const ha_state_t *
     }
     bool is_on = light_state_is_on(state->state);
     int brightness = light_extract_brightness_percent(state, is_on);
+    w_light_tile_ctx_t *ctx = (w_light_tile_ctx_t *)instance->ctx;
+    if (ctx != NULL) {
+        ctx->is_on = is_on;
+        ctx->brightness = brightness;
+        ctx->unavailable = false;
+    }
     light_apply_visual(instance->obj, is_on, brightness, is_on ? "ON" : "OFF");
 }
 
@@ -367,6 +433,12 @@ void w_light_tile_mark_unavailable(ui_widget_instance_t *instance)
 {
     if (instance == NULL || instance->obj == NULL) {
         return;
+    }
+    w_light_tile_ctx_t *ctx = (w_light_tile_ctx_t *)instance->ctx;
+    if (ctx != NULL) {
+        ctx->is_on = false;
+        ctx->brightness = 0;
+        ctx->unavailable = true;
     }
     light_apply_visual(instance->obj, false, 0, "unavailable");
 }

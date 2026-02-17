@@ -10,6 +10,7 @@
 typedef struct {
     const char *ssid;
     const char *password;
+    const char *country_code;
     uint8_t channel;
     uint8_t max_connection;
 } wifi_mgr_ap_config_t;
@@ -23,6 +24,7 @@ typedef struct {
 typedef struct {
     const char *ssid;
     const char *password;
+    const char *country_code;
     bool wait_for_ip;
     int connect_timeout_ms;
     int max_retries;

@@ -4,21 +4,32 @@
 #include <stdio.h>
 #include <string.h>
 
-#include "esp_attr.h"
+#include "esp_heap_caps.h"
+#include "esp_log.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/semphr.h"
+#include "util/log_tags.h"
 
 static SemaphoreHandle_t s_model_mutex = NULL;
-#if CONFIG_SPIRAM_ALLOW_BSS_SEG_EXTERNAL_MEMORY
-#define APP_HA_MODEL_BSS_ATTR EXT_RAM_BSS_ATTR
-#else
-#define APP_HA_MODEL_BSS_ATTR
-#endif
-
-static APP_HA_MODEL_BSS_ATTR ha_entity_info_t s_entities[APP_HA_MAX_ENTITIES];
+static ha_entity_info_t *s_entities = NULL;
 static size_t s_entity_count = 0;
-static APP_HA_MODEL_BSS_ATTR ha_state_t s_states[APP_HA_MAX_STATES];
+static ha_state_t *s_states = NULL;
 static size_t s_state_count = 0;
+static uint32_t s_state_revision = 0;
+
+static void ha_model_free_buffers(void)
+{
+    if (s_entities != NULL) {
+        heap_caps_free(s_entities);
+        s_entities = NULL;
+    }
+    if (s_states != NULL) {
+        heap_caps_free(s_states);
+        s_states = NULL;
+    }
+    s_entity_count = 0;
+    s_state_count = 0;
+}
 
 static void safe_copy_cstr(char *dst, size_t dst_size, const char *src)
 {
@@ -83,6 +94,18 @@ static void fill_domain(const char *entity_id, char *domain, size_t domain_len)
     domain[len] = '\0';
 }
 
+static bool ha_state_equals(const ha_state_t *lhs, const ha_state_t *rhs)
+{
+    if (lhs == NULL || rhs == NULL) {
+        return false;
+    }
+
+    return strncmp(lhs->entity_id, rhs->entity_id, sizeof(lhs->entity_id)) == 0 &&
+           strncmp(lhs->state, rhs->state, sizeof(lhs->state)) == 0 &&
+           strncmp(lhs->attributes_json, rhs->attributes_json, sizeof(lhs->attributes_json)) == 0 &&
+           lhs->last_changed_unix_ms == rhs->last_changed_unix_ms;
+}
+
 esp_err_t ha_model_init(void)
 {
     if (s_model_mutex != NULL) {
@@ -92,19 +115,43 @@ esp_err_t ha_model_init(void)
     if (s_model_mutex == NULL) {
         return ESP_ERR_NO_MEM;
     }
+
+    s_entities = (ha_entity_info_t *)heap_caps_calloc(
+        APP_HA_MAX_ENTITIES, sizeof(ha_entity_info_t), MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    if (s_entities == NULL) {
+        s_entities =
+            (ha_entity_info_t *)heap_caps_calloc(APP_HA_MAX_ENTITIES, sizeof(ha_entity_info_t), MALLOC_CAP_8BIT);
+    }
+
+    s_states = (ha_state_t *)heap_caps_calloc(APP_HA_MAX_STATES, sizeof(ha_state_t), MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    if (s_states == NULL) {
+        s_states = (ha_state_t *)heap_caps_calloc(APP_HA_MAX_STATES, sizeof(ha_state_t), MALLOC_CAP_8BIT);
+    }
+
+    if (s_entities == NULL || s_states == NULL) {
+        ESP_LOGE(TAG_HA_MODEL, "Failed to allocate HA model buffers");
+        ha_model_free_buffers();
+        vSemaphoreDelete(s_model_mutex);
+        s_model_mutex = NULL;
+        return ESP_ERR_NO_MEM;
+    }
+
+    ESP_LOGI(TAG_HA_MODEL, "Model buffers ready (%u entities, %u states)",
+        (unsigned)APP_HA_MAX_ENTITIES, (unsigned)APP_HA_MAX_STATES);
     return ESP_OK;
 }
 
 void ha_model_reset(void)
 {
-    if (s_model_mutex == NULL) {
+    if (s_model_mutex == NULL || s_entities == NULL || s_states == NULL) {
         return;
     }
     xSemaphoreTake(s_model_mutex, portMAX_DELAY);
-    memset(s_entities, 0, sizeof(s_entities));
-    memset(s_states, 0, sizeof(s_states));
+    memset(s_entities, 0, sizeof(ha_entity_info_t) * APP_HA_MAX_ENTITIES);
+    memset(s_states, 0, sizeof(ha_state_t) * APP_HA_MAX_STATES);
     s_entity_count = 0;
     s_state_count = 0;
+    s_state_revision++;
     xSemaphoreGive(s_model_mutex);
 }
 
@@ -130,7 +177,7 @@ static int find_state_index(const char *entity_id)
 
 esp_err_t ha_model_upsert_entity(const ha_entity_info_t *entity)
 {
-    if (s_model_mutex == NULL || entity == NULL || entity->id[0] == '\0') {
+    if (s_model_mutex == NULL || s_entities == NULL || entity == NULL || entity->id[0] == '\0') {
         return ESP_ERR_INVALID_ARG;
     }
 
@@ -153,20 +200,27 @@ esp_err_t ha_model_upsert_entity(const ha_entity_info_t *entity)
 
 esp_err_t ha_model_upsert_state(const ha_state_t *state)
 {
-    if (s_model_mutex == NULL || state == NULL || state->entity_id[0] == '\0') {
+    if (s_model_mutex == NULL || s_entities == NULL || s_states == NULL || state == NULL || state->entity_id[0] == '\0') {
         return ESP_ERR_INVALID_ARG;
     }
 
     xSemaphoreTake(s_model_mutex, portMAX_DELAY);
     int idx = find_state_index(state->entity_id);
+    bool state_changed = false;
     if (idx >= 0) {
+        if (ha_state_equals(&s_states[idx], state)) {
+            xSemaphoreGive(s_model_mutex);
+            return ESP_OK;
+        }
         s_states[idx] = *state;
+        state_changed = true;
     } else {
         if (s_state_count >= APP_HA_MAX_STATES) {
             xSemaphoreGive(s_model_mutex);
             return ESP_ERR_NO_MEM;
         }
         s_states[s_state_count++] = *state;
+        state_changed = true;
     }
 
     if (find_entity_index(state->entity_id) < 0 && s_entity_count < APP_HA_MAX_ENTITIES) {
@@ -177,13 +231,17 @@ esp_err_t ha_model_upsert_state(const ha_state_t *state)
         s_entities[s_entity_count++] = entity;
     }
 
+    if (state_changed) {
+        s_state_revision++;
+    }
+
     xSemaphoreGive(s_model_mutex);
     return ESP_OK;
 }
 
 bool ha_model_get_state(const char *entity_id, ha_state_t *out_state)
 {
-    if (s_model_mutex == NULL || entity_id == NULL || out_state == NULL) {
+    if (s_model_mutex == NULL || s_states == NULL || entity_id == NULL || out_state == NULL) {
         return false;
     }
     bool found = false;
@@ -200,7 +258,7 @@ bool ha_model_get_state(const char *entity_id, ha_state_t *out_state)
 size_t ha_model_list_entities(
     const char *domain_filter, const char *search, ha_entity_info_t *out_entities, size_t max_out)
 {
-    if (s_model_mutex == NULL || out_entities == NULL || max_out == 0) {
+    if (s_model_mutex == NULL || s_entities == NULL || out_entities == NULL || max_out == 0) {
         return 0;
     }
     size_t written = 0;
@@ -223,7 +281,7 @@ size_t ha_model_list_entities(
 
 size_t ha_model_list_states(ha_state_t *out_states, size_t max_out)
 {
-    if (s_model_mutex == NULL || out_states == NULL || max_out == 0) {
+    if (s_model_mutex == NULL || s_states == NULL || out_states == NULL || max_out == 0) {
         return 0;
     }
 
@@ -235,4 +293,17 @@ size_t ha_model_list_states(ha_state_t *out_states, size_t max_out)
     xSemaphoreGive(s_model_mutex);
 
     return written;
+}
+
+uint32_t ha_model_state_revision(void)
+{
+    if (s_model_mutex == NULL) {
+        return 0;
+    }
+
+    uint32_t revision = 0;
+    xSemaphoreTake(s_model_mutex, portMAX_DELAY);
+    revision = s_state_revision;
+    xSemaphoreGive(s_model_mutex);
+    return revision;
 }

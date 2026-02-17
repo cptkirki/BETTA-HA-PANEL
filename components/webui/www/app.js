@@ -11,12 +11,21 @@ const GRAPH_POINTS_MIN = 16;
 const GRAPH_POINTS_MAX = 64;
 const GRAPH_TIME_WINDOW_MIN = 1;
 const GRAPH_TIME_WINDOW_MAX = 1440;
+const ENTITY_AUTOCOMPLETE_DEBOUNCE_MS = 220;
+const ENTITY_AUTOCOMPLETE_MAX_ITEMS = 24;
+const DEFAULT_SLIDER_ENTITY_DOMAIN = "auto";
 const SLIDER_DIRECTIONS = new Set([
   "auto",
   "left_to_right",
   "right_to_left",
   "bottom_to_top",
   "top_to_bottom",
+]);
+const SLIDER_ENTITY_DOMAINS = new Set([
+  "auto",
+  "light",
+  "media_player",
+  "cover",
 ]);
 
 function widgetSizeLimits(type) {
@@ -33,7 +42,7 @@ function widgetSizeLimits(type) {
     case "button":
       return { minW: 180, minH: 120, maxW: 480, maxH: 320 };
     case "slider":
-      return { minW: MIN_WIDGET_SIZE, minH: MIN_WIDGET_SIZE, maxW: CANVAS_WIDTH, maxH: CANVAS_HEIGHT };
+      return { minW: 100, minH: 100, maxW: CANVAS_WIDTH, maxH: CANVAS_HEIGHT };
     case "graph":
       return { minW: 220, minH: 140, maxW: CANVAS_WIDTH, maxH: CANVAS_HEIGHT };
     case "light_tile":
@@ -71,6 +80,8 @@ const editor = {
   selectedPageId: null,
   selectedWidgetId: null,
   activePane: "layout",
+  provisioningStage: null,
+  editorStarted: false,
   settings: null,
   wifiScanItems: [],
   wifiScanHasRun: false,
@@ -84,6 +95,10 @@ const editor = {
 };
 
 const el = {
+  provisioningRoot: document.getElementById("provisioningRoot"),
+  provisioningWifiPage: document.getElementById("provisioningWifiPage"),
+  provisioningHaPage: document.getElementById("provisioningHaPage"),
+  editorShell: document.getElementById("editorShell"),
   layoutTabBtn: document.getElementById("layoutTabBtn"),
   settingsTabBtn: document.getElementById("settingsTabBtn"),
   layoutPane: document.getElementById("layoutPane"),
@@ -119,13 +134,13 @@ const el = {
   importBtn: document.getElementById("importBtn"),
   importFile: document.getElementById("importFile"),
   jsonPaste: document.getElementById("jsonPaste"),
-  fWidgetId: document.getElementById("fWidgetId"),
   fTitle: document.getElementById("fTitle"),
   fType: document.getElementById("fType"),
   fEntity: document.getElementById("fEntity"),
   fSecondaryEntityWrap: document.getElementById("fSecondaryEntityWrap"),
   fSecondaryEntity: document.getElementById("fSecondaryEntity"),
   buttonOptions: document.getElementById("buttonOptions"),
+  fSliderEntityDomain: document.getElementById("fSliderEntityDomain"),
   fButtonAccentColor: document.getElementById("fButtonAccentColor"),
   sliderOptions: document.getElementById("sliderOptions"),
   fSliderDirection: document.getElementById("fSliderDirection"),
@@ -142,12 +157,14 @@ const el = {
   entityOptions: document.getElementById("entityOptions"),
   sensorEntityOptions: document.getElementById("sensorEntityOptions"),
   settingsWifiSsid: document.getElementById("settingsWifiSsid"),
+  settingsWifiCountryCode: document.getElementById("settingsWifiCountryCode"),
   scanWifiBtn: document.getElementById("scanWifiBtn"),
   settingsWifiScanResults: document.getElementById("settingsWifiScanResults"),
   settingsWifiScanInfo: document.getElementById("settingsWifiScanInfo"),
   settingsWifiPassword: document.getElementById("settingsWifiPassword"),
   settingsHaUrl: document.getElementById("settingsHaUrl"),
   settingsHaToken: document.getElementById("settingsHaToken"),
+  settingsHaRestEnabled: document.getElementById("settingsHaRestEnabled"),
   settingsNtpServer: document.getElementById("settingsNtpServer"),
   settingsTimezone: document.getElementById("settingsTimezone"),
   settingsWifiInfo: document.getElementById("settingsWifiInfo"),
@@ -156,10 +173,39 @@ const el = {
   settingsApInfo: document.getElementById("settingsApInfo"),
   reloadSettingsBtn: document.getElementById("reloadSettingsBtn"),
   saveSettingsBtn: document.getElementById("saveSettingsBtn"),
+  provWifiSsid: document.getElementById("provWifiSsid"),
+  provWifiCountryCode: document.getElementById("provWifiCountryCode"),
+  provScanWifiBtn: document.getElementById("provScanWifiBtn"),
+  provWifiScanResults: document.getElementById("provWifiScanResults"),
+  provWifiScanInfo: document.getElementById("provWifiScanInfo"),
+  provWifiPassword: document.getElementById("provWifiPassword"),
+  provWifiShowPassword: document.getElementById("provWifiShowPassword"),
+  provWifiInfo: document.getElementById("provWifiInfo"),
+  provWifiSaveBtn: document.getElementById("provWifiSaveBtn"),
+  provHaUrl: document.getElementById("provHaUrl"),
+  provHaToken: document.getElementById("provHaToken"),
+  provHaShowToken: document.getElementById("provHaShowToken"),
+  provHaInfo: document.getElementById("provHaInfo"),
+  provHaSaveBtn: document.getElementById("provHaSaveBtn"),
+};
+
+const entityAutocomplete = {
+  primary: {
+    timerId: null,
+    requestSeq: 0,
+  },
+  secondary: {
+    timerId: null,
+    requestSeq: 0,
+  },
 };
 
 function normalizeSliderDirection(value) {
   return SLIDER_DIRECTIONS.has(value) ? value : DEFAULT_SLIDER_DIRECTION;
+}
+
+function normalizeSliderEntityDomain(value) {
+  return SLIDER_ENTITY_DOMAINS.has(value) ? value : DEFAULT_SLIDER_ENTITY_DOMAIN;
 }
 
 function normalizeHexColor(value, fallback = DEFAULT_SLIDER_ACCENT_COLOR) {
@@ -213,6 +259,7 @@ function normalizeLayoutWidgets(layout) {
       if (widget.type === "slider") {
         widget.slider_direction = normalizeSliderDirection(widget.slider_direction);
         widget.slider_accent_color = normalizeHexColor(widget.slider_accent_color, DEFAULT_SLIDER_ACCENT_COLOR);
+        widget.slider_entity_domain = normalizeSliderEntityDomain(widget.slider_entity_domain);
       }
       if (widget.type === "graph") {
         widget.graph_line_color = normalizeHexColor(widget.graph_line_color, DEFAULT_GRAPH_LINE_COLOR);
@@ -233,10 +280,122 @@ function setStatus(text, isError = false) {
   el.status.style.color = isError ? "#ff8f94" : "#9db0c3";
 }
 
-function setWifiScanInfo(text, isError = false) {
-  if (!el.settingsWifiScanInfo) return;
-  el.settingsWifiScanInfo.textContent = text;
-  el.settingsWifiScanInfo.classList.toggle("error", isError);
+function getWifiScanUi(scope = "settings") {
+  if (scope === "provisioning") {
+    return {
+      scanButton: el.provScanWifiBtn,
+      ssidInput: el.provWifiSsid,
+      resultsSelect: el.provWifiScanResults,
+      info: el.provWifiScanInfo,
+    };
+  }
+
+  return {
+    scanButton: el.scanWifiBtn,
+    ssidInput: el.settingsWifiSsid,
+    resultsSelect: el.settingsWifiScanResults,
+    info: el.settingsWifiScanInfo,
+  };
+}
+
+function setWifiScanInfo(text, isError = false, scope = "settings") {
+  const ui = getWifiScanUi(scope);
+  if (!ui.info) return;
+  ui.info.textContent = text;
+  ui.info.classList.toggle("error", isError);
+}
+
+function setProvisioningInfo(stage, text, isError = false) {
+  const target = stage === "wifi" ? el.provWifiInfo : el.provHaInfo;
+  if (!target) return;
+  target.textContent = text;
+  target.classList.toggle("error", isError);
+}
+
+function normalizeCountryCode(value) {
+  const normalized = (value || "").trim().toUpperCase();
+  return /^[A-Z]{2}$/.test(normalized) ? normalized : "";
+}
+
+function setProvisioningVisible(visible) {
+  if (el.provisioningRoot) {
+    el.provisioningRoot.classList.toggle("hidden", !visible);
+  }
+  if (el.editorShell) {
+    el.editorShell.classList.toggle("hidden", visible);
+  }
+}
+
+function provisioningStageForSettings(settings) {
+  const wifiConfigured = Boolean(settings?.wifi?.configured);
+  const haConfigured = Boolean(settings?.ha?.configured);
+  if (!wifiConfigured) return "wifi";
+  if (!haConfigured) return "ha";
+  return null;
+}
+
+function showProvisioningStage(stage, settings) {
+  if (!stage) {
+    editor.provisioningStage = null;
+    setProvisioningVisible(false);
+    return false;
+  }
+
+  editor.provisioningStage = stage;
+  const wifi = settings?.wifi || {};
+  const ha = settings?.ha || {};
+  editor.wifiScanSupported = wifi.scan_supported !== false;
+
+  if (el.provisioningWifiPage) {
+    el.provisioningWifiPage.classList.toggle("hidden", stage !== "wifi");
+  }
+  if (el.provisioningHaPage) {
+    el.provisioningHaPage.classList.toggle("hidden", stage !== "ha");
+  }
+  setProvisioningVisible(true);
+
+  if (el.provWifiSsid) {
+    el.provWifiSsid.value = wifi.ssid || "";
+  }
+  if (el.provWifiCountryCode) {
+    el.provWifiCountryCode.value = normalizeCountryCode(wifi.country_code) || "US";
+  }
+  if (el.provWifiPassword) {
+    el.provWifiPassword.value = "";
+    el.provWifiPassword.type = "password";
+  }
+  if (el.provWifiShowPassword) {
+    el.provWifiShowPassword.checked = false;
+  }
+  if (el.provHaUrl) {
+    el.provHaUrl.value = ha.ws_url || "";
+  }
+  if (el.provHaToken) {
+    el.provHaToken.value = "";
+    el.provHaToken.type = "password";
+  }
+  if (el.provHaShowToken) {
+    el.provHaShowToken.checked = false;
+  }
+
+  if (el.provScanWifiBtn) {
+    el.provScanWifiBtn.disabled = !editor.wifiScanSupported || editor.wifiScanInProgress;
+  }
+  renderWifiScanResults(editor.wifiScanItems, "provisioning");
+
+  if (!editor.wifiScanSupported) {
+    setWifiScanInfo("Wi-Fi scan is unavailable in setup AP mode on this hardware. Enter SSID manually.", false, "provisioning");
+  } else if (!editor.wifiScanHasRun && !editor.wifiScanInProgress) {
+    setWifiScanInfo('Click "Scan" to list nearby networks.', false, "provisioning");
+  }
+
+  setProvisioningInfo(
+    stage,
+    stage === "wifi"
+      ? "Save reboots the panel. After reboot, HA provisioning is shown."
+      : "Save reboots the panel. After reboot, the editor is unlocked."
+  );
+  return true;
 }
 
 function setActivePane(pane) {
@@ -283,9 +442,15 @@ function renderSettings() {
   editor.wifiScanSupported = scanSupported;
 
   el.settingsWifiSsid.value = wifi.ssid || "";
+  if (el.settingsWifiCountryCode) {
+    el.settingsWifiCountryCode.value = normalizeCountryCode(wifi.country_code) || "US";
+  }
   el.settingsWifiPassword.value = "";
   el.settingsHaUrl.value = ha.ws_url || "";
   el.settingsHaToken.value = "";
+  if (el.settingsHaRestEnabled) {
+    el.settingsHaRestEnabled.checked = ha.rest_enabled === true;
+  }
   el.settingsNtpServer.value = time.ntp_server || "";
   el.settingsTimezone.value = time.timezone || "";
 
@@ -293,12 +458,14 @@ function renderSettings() {
     `Configured: ${wifi.configured ? "yes" : "no"}`,
     `Connected: ${wifi.connected ? "yes" : "no"}`,
     `Password stored: ${wifi.password_set ? "yes" : "no"}`,
+    `Country: ${normalizeCountryCode(wifi.country_code) || "US"}`,
   ].join(" | ");
 
   el.settingsHaInfo.textContent = [
     `Configured: ${ha.configured ? "yes" : "no"}`,
     `Connected: ${ha.connected ? "yes" : "no"}`,
     `Token stored: ${ha.access_token_set ? "yes" : "no"}`,
+    `REST fallback: ${ha.rest_enabled ? "on" : "off"}`,
   ].join(" | ");
 
   el.settingsTimeInfo.textContent = "Applied after reboot. Time sync starts when Wi-Fi is connected.";
@@ -321,11 +488,12 @@ function renderSettings() {
   renderWifiScanResults(editor.wifiScanItems);
 }
 
-function renderWifiScanResults(items) {
-  const select = el.settingsWifiScanResults;
+function renderWifiScanResults(items, scope = "settings") {
+  const ui = getWifiScanUi(scope);
+  const select = ui.resultsSelect;
   if (!select) return;
 
-  const currentSsid = el.settingsWifiSsid.value.trim();
+  const currentSsid = ui.ssidInput ? ui.ssidInput.value.trim() : "";
   select.innerHTML = "";
   if (!editor.wifiScanSupported) {
     const option = document.createElement("option");
@@ -377,18 +545,23 @@ function renderWifiScanResults(items) {
   }
 }
 
-async function scanWifiNetworks() {
-  if (!el.scanWifiBtn) return;
+async function scanWifiNetworks(scope = "settings") {
+  const ui = getWifiScanUi(scope);
+  if (!ui.scanButton) return;
   if (!editor.wifiScanSupported) {
-    setWifiScanInfo("Wi-Fi scan is unavailable in setup AP mode on this hardware. Enter SSID manually.");
+    setWifiScanInfo(
+      "Wi-Fi scan is unavailable in setup AP mode on this hardware. Enter SSID manually.",
+      false,
+      scope
+    );
     return;
   }
   if (editor.wifiScanInProgress) return;
 
   editor.wifiScanInProgress = true;
-  el.scanWifiBtn.disabled = true;
-  renderWifiScanResults([]);
-  setWifiScanInfo("Scanning nearby networks (max 8s)...");
+  ui.scanButton.disabled = true;
+  renderWifiScanResults([], scope);
+  setWifiScanInfo("Scanning nearby networks (max 8s)...", false, scope);
   setStatus("Scanning Wi-Fi networks...");
 
   const controller = new AbortController();
@@ -416,25 +589,29 @@ async function scanWifiNetworks() {
     data = data || {};
     editor.wifiScanItems = Array.isArray(data.items) ? data.items : [];
     editor.wifiScanHasRun = true;
-    renderWifiScanResults(editor.wifiScanItems);
+    renderWifiScanResults(editor.wifiScanItems, scope);
 
     if (editor.wifiScanItems.length > 0) {
-      setWifiScanInfo(`${editor.wifiScanItems.length} network(s) found. Select one to fill SSID.`);
+      setWifiScanInfo(
+        `${editor.wifiScanItems.length} network(s) found. Select one to fill SSID.`,
+        false,
+        scope
+      );
     } else {
-      setWifiScanInfo("No networks found. Move closer to your router and scan again.");
+      setWifiScanInfo("No networks found. Move closer to your router and scan again.", false, scope);
     }
     setStatus(`Wi-Fi scan complete (${editor.wifiScanItems.length} networks)`);
   } catch (err) {
     editor.wifiScanHasRun = true;
-    renderWifiScanResults(editor.wifiScanItems);
+    renderWifiScanResults(editor.wifiScanItems, scope);
     const detail = err?.name === "AbortError" ? "Wi-Fi scan request timed out" : (err?.message || "Unknown error");
-    setWifiScanInfo(detail, true);
+    setWifiScanInfo(detail, true, scope);
     setStatus(`Wi-Fi scan failed: ${detail}`, true);
   } finally {
     window.clearTimeout(timeoutId);
     editor.wifiScanInProgress = false;
-    renderWifiScanResults(editor.wifiScanItems);
-    el.scanWifiBtn.disabled = false;
+    renderWifiScanResults(editor.wifiScanItems, scope);
+    ui.scanButton.disabled = false;
   }
 }
 
@@ -448,21 +625,105 @@ async function loadSettings(silent = false) {
     if (!silent) {
       setStatus("Settings loaded");
     }
+    return editor.settings;
   } catch (err) {
     if (!silent) {
       setStatus(`Settings load failed: ${err.message}`, true);
     }
+    return null;
   }
+}
+
+async function putSettings(payload) {
+  const response = await fetch("/api/settings", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  if (!response.ok) {
+    let detail = await response.text();
+    try {
+      const json = JSON.parse(detail);
+      detail = json.error || detail;
+    } catch (_) {}
+    throw new Error(detail);
+  }
+}
+
+async function saveWifiProvisioning() {
+  const ssid = el.provWifiSsid?.value.trim() || "";
+  const password = el.provWifiPassword?.value || "";
+  const countryCode = normalizeCountryCode(el.provWifiCountryCode?.value) || "";
+
+  if (!ssid) {
+    setProvisioningInfo("wifi", "SSID ist erforderlich.", true);
+    return;
+  }
+  if (!countryCode) {
+    setProvisioningInfo("wifi", "Country Code muss 2 Buchstaben haben (z.B. US, DE).", true);
+    return;
+  }
+
+  const payload = {
+    wifi: {
+      ssid,
+      country_code: countryCode,
+    },
+    reboot: true,
+  };
+  if (password.length > 0) {
+    payload.wifi.password = password;
+  }
+
+  setProvisioningInfo("wifi", "Saving settings and rebooting...");
+  await putSettings(payload);
+  setProvisioningInfo("wifi", "Settings saved. Device reboots in ~2s.");
+}
+
+async function saveHaProvisioning() {
+  const wsUrl = el.provHaUrl?.value.trim() || "";
+  const accessToken = el.provHaToken?.value.trim() || "";
+
+  if (!wsUrl) {
+    setProvisioningInfo("ha", "WebSocket URL ist erforderlich.", true);
+    return;
+  }
+  if (!wsUrl.startsWith("ws://") && !wsUrl.startsWith("wss://")) {
+    setProvisioningInfo("ha", "HA URL muss mit ws:// oder wss:// beginnen.", true);
+    return;
+  }
+  if (!accessToken) {
+    setProvisioningInfo("ha", "Long-lived Access Token ist erforderlich.", true);
+    return;
+  }
+
+  const payload = {
+    ha: {
+      ws_url: wsUrl,
+      access_token: accessToken,
+    },
+    reboot: true,
+  };
+
+  setProvisioningInfo("ha", "Saving settings and rebooting...");
+  await putSettings(payload);
+  setProvisioningInfo("ha", "Settings saved. Device reboots in ~2s.");
 }
 
 async function saveSettings() {
   const wifiSsid = el.settingsWifiSsid.value.trim();
   const wifiPassword = el.settingsWifiPassword.value;
+  const wifiCountryCode = normalizeCountryCode(el.settingsWifiCountryCode?.value) || "";
   const haUrl = el.settingsHaUrl.value.trim();
   const haToken = el.settingsHaToken.value.trim();
+  const haRestEnabled = Boolean(el.settingsHaRestEnabled?.checked);
   const ntpServer = el.settingsNtpServer.value.trim();
   const timezone = el.settingsTimezone.value.trim();
 
+  if (!wifiCountryCode) {
+    setStatus("Wi-Fi country code must be a 2-letter ISO code (e.g. US, DE)", true);
+    return;
+  }
   if (haUrl && !haUrl.startsWith("ws://") && !haUrl.startsWith("wss://")) {
     setStatus("HA URL must start with ws:// or wss://", true);
     return;
@@ -471,9 +732,11 @@ async function saveSettings() {
   const payload = {
     wifi: {
       ssid: wifiSsid,
+      country_code: wifiCountryCode,
     },
     ha: {
       ws_url: haUrl,
+      rest_enabled: haRestEnabled,
     },
     time: {
       ntp_server: ntpServer,
@@ -489,20 +752,7 @@ async function saveSettings() {
   }
 
   setStatus("Saving settings...");
-  const response = await fetch("/api/settings", {
-    method: "PUT",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload),
-  });
-  if (!response.ok) {
-    let detail = await response.text();
-    try {
-      const json = JSON.parse(detail);
-      detail = json.error || detail;
-    } catch (_) {}
-    throw new Error(detail);
-  }
-
+  await putSettings(payload);
   setStatus("Settings saved. Device reboots in ~2s. Reconnect and reopen the panel URL.");
 }
 
@@ -538,12 +788,37 @@ function selectedWidget() {
   return page.widgets.find((w) => w.id === editor.selectedWidgetId) || null;
 }
 
-function expectedDomainForWidgetType(type) {
-  if (type === "button") return "switch";
-  if (type === "light_tile") return "light";
-  if (type === "heating_tile") return "climate";
-  if (type === "weather_tile" || type === "weather_3day") return "weather";
-  return "";
+function inspectorWidgetType() {
+  return selectedWidget()?.type || el.fType?.value || "sensor";
+}
+
+function inspectorSliderEntityDomain() {
+  const widget = selectedWidget();
+  if (widget?.type === "slider") {
+    return normalizeSliderEntityDomain(widget.slider_entity_domain);
+  }
+  return normalizeSliderEntityDomain(el.fSliderEntityDomain?.value);
+}
+
+function allowedEntityDomainsForWidgetType(type, sliderDomain = DEFAULT_SLIDER_ENTITY_DOMAIN) {
+  if (type === "sensor") return ["sensor"];
+  if (type === "button") return ["switch"];
+  if (type === "light_tile") return ["light"];
+  if (type === "heating_tile") return ["climate"];
+  if (type === "weather_tile" || type === "weather_3day") return ["weather"];
+  if (type === "slider") {
+    const normalized = normalizeSliderEntityDomain(sliderDomain);
+    if (normalized === "auto") {
+      return ["light", "media_player", "cover"];
+    }
+    return [normalized];
+  }
+  return [];
+}
+
+function expectedDomainForWidgetType(type, sliderDomain = DEFAULT_SLIDER_ENTITY_DOMAIN) {
+  const domains = allowedEntityDomainsForWidgetType(type, sliderDomain);
+  return domains.length === 1 ? domains[0] : "";
 }
 
 function listEntitiesByDomain(domain) {
@@ -551,25 +826,21 @@ function listEntitiesByDomain(domain) {
   return editor.entities.filter((entity) => typeof entity.id === "string" && entity.id.startsWith(`${domain}.`));
 }
 
-function entityMatchesWidgetType(entity, type) {
+function entityMatchesWidgetType(entity, type, sliderDomain = DEFAULT_SLIDER_ENTITY_DOMAIN) {
   const id = typeof entity?.id === "string" ? entity.id : "";
   if (!id) return false;
 
-  if (type === "sensor") {
-    return id.startsWith("sensor.") || id.startsWith("binary_sensor.");
-  }
-
-  const requiredDomain = expectedDomainForWidgetType(type);
-  if (!requiredDomain) return true;
-  return id.startsWith(`${requiredDomain}.`);
+  const allowedDomains = allowedEntityDomainsForWidgetType(type, sliderDomain);
+  if (!allowedDomains.length) return true;
+  return allowedDomains.some((domain) => id.startsWith(`${domain}.`));
 }
 
-function listEntitiesForWidgetType(type) {
-  return editor.entities.filter((entity) => entityMatchesWidgetType(entity, type));
+function listEntitiesForWidgetType(type, sliderDomain = DEFAULT_SLIDER_ENTITY_DOMAIN) {
+  return editor.entities.filter((entity) => entityMatchesWidgetType(entity, type, sliderDomain));
 }
 
-function pickDefaultEntityForWidgetType(type) {
-  const matching = listEntitiesForWidgetType(type);
+function pickDefaultEntityForWidgetType(type, sliderDomain = DEFAULT_SLIDER_ENTITY_DOMAIN) {
+  const matching = listEntitiesForWidgetType(type, sliderDomain);
   if (matching.length > 0) return matching[0].id;
   return editor.entities[0]?.id || "sensor.example";
 }
@@ -583,10 +854,168 @@ function uniqueId(prefix, list, accessor = (x) => x.id) {
   }
 }
 
+function sanitizeIdPart(value) {
+  const normalized = String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9_]+/g, "_")
+    .replace(/^_+|_+$/g, "");
+  return normalized || "item";
+}
+
+function createWidgetIdForPage(page, type) {
+  const pagePart = sanitizeIdPart(page?.id || page?.title || "page");
+  const typePart = sanitizeIdPart(type || "widget");
+  const allWidgets = editor.layout?.pages?.flatMap((p) => (Array.isArray(p.widgets) ? p.widgets : [])) || [];
+
+  let i = 1;
+  while (true) {
+    const candidate = `${pagePart}_${typePart}_${i}`;
+    if (!allWidgets.some((widget) => widget?.id === candidate)) {
+      return candidate;
+    }
+    i += 1;
+  }
+}
+
 async function apiGet(path) {
   const response = await fetch(path, { cache: "no-store" });
   if (!response.ok) throw new Error(`${response.status} ${response.statusText}`);
   return response.json();
+}
+
+function setEntityOptionsList(target, entities) {
+  target.innerHTML = "";
+  for (const entity of entities) {
+    if (!entity || typeof entity.id !== "string" || !entity.id.length) continue;
+    const option = document.createElement("option");
+    option.value = entity.id;
+    option.label = `${entity.id} (${entity.name || entity.id})`;
+    target.appendChild(option);
+  }
+}
+
+function normalizeEntitySearchTerm(value) {
+  if (typeof value !== "string") return "";
+  const trimmed = value.trim();
+  if (!trimmed) return "";
+  const wildcardIndex = trimmed.indexOf("*");
+  if (wildcardIndex < 0) return trimmed;
+  return trimmed.slice(wildcardIndex + 1).trim();
+}
+
+function parseEntitySearchInput(rawValue, fallbackDomain = "") {
+  const value = typeof rawValue === "string" ? rawValue.trim() : "";
+  let domain = typeof fallbackDomain === "string" ? fallbackDomain.trim().toLowerCase() : "";
+  let search = value;
+
+  const dotIndex = value.indexOf(".");
+  if (dotIndex > 0) {
+    const candidateDomain = value.slice(0, dotIndex).trim().toLowerCase();
+    if (/^[a-z0-9_]+$/.test(candidateDomain)) {
+      domain = candidateDomain;
+      search = value.slice(dotIndex + 1);
+    }
+  }
+
+  search = normalizeEntitySearchTerm(search);
+  return { domain, search };
+}
+
+function entityContainsSearch(entity, search) {
+  if (!search) return true;
+  const needle = search.toLowerCase();
+  const id = String(entity?.id || "").toLowerCase();
+  const name = String(entity?.name || "").toLowerCase();
+  return id.includes(needle) || name.includes(needle);
+}
+
+function filterLocalEntitySuggestions(source, domain, search, maxItems) {
+  const results = [];
+  for (const entity of source) {
+    if (!entity || typeof entity.id !== "string" || entity.id.length === 0) continue;
+    if (domain && !entity.id.startsWith(`${domain}.`)) continue;
+    if (!entityContainsSearch(entity, search)) continue;
+    results.push(entity);
+    if (results.length >= maxItems) break;
+  }
+  return results;
+}
+
+async function fetchEntitySuggestions(domain, search, limit) {
+  const params = new URLSearchParams();
+  if (domain) params.set("domain", domain);
+  if (search) params.set("search", search);
+  params.set("limit", String(limit));
+  const data = await apiGet(`/api/entities?${params.toString()}`);
+  return Array.isArray(data.items) ? data.items : [];
+}
+
+function primaryEntitySource() {
+  const inspectorType = inspectorWidgetType();
+  const sliderDomain = inspectorSliderEntityDomain();
+  const typedOptions = listEntitiesForWidgetType(inspectorType, sliderDomain);
+  return typedOptions.length > 0 ? typedOptions : editor.entities;
+}
+
+function defaultPrimaryEntityDomain() {
+  return expectedDomainForWidgetType(inspectorWidgetType(), inspectorSliderEntityDomain());
+}
+
+function scheduleEntityAutocomplete(kind, immediate = false) {
+  const isSecondary = kind === "secondary";
+  const state = isSecondary ? entityAutocomplete.secondary : entityAutocomplete.primary;
+  const input = isSecondary ? el.fSecondaryEntity : el.fEntity;
+  const options = isSecondary ? el.sensorEntityOptions : el.entityOptions;
+  if (!input || !options) return;
+  if (isSecondary && input.disabled) return;
+
+  if (state.timerId !== null) {
+    window.clearTimeout(state.timerId);
+    state.timerId = null;
+  }
+
+  const run = async () => {
+    const requestSeq = ++state.requestSeq;
+    const raw = input.value || "";
+    const fallbackDomain = isSecondary ? "sensor" : defaultPrimaryEntityDomain();
+    const { domain, search } = parseEntitySearchInput(raw, fallbackDomain);
+    const source = isSecondary ? listEntitiesByDomain("sensor") : primaryEntitySource();
+    const allowedDomains = isSecondary
+      ? ["sensor"]
+      : allowedEntityDomainsForWidgetType(inspectorWidgetType(), inspectorSliderEntityDomain());
+
+    if (domain && allowedDomains.length > 0 && !allowedDomains.includes(domain)) {
+      setEntityOptionsList(options, []);
+      return;
+    }
+
+    const localResults = filterLocalEntitySuggestions(source, domain, search, ENTITY_AUTOCOMPLETE_MAX_ITEMS);
+    setEntityOptionsList(options, localResults);
+
+    const shouldQueryApi = domain.length > 0 || search.length >= 2;
+    if (!shouldQueryApi) return;
+
+    try {
+      const remoteResults = await fetchEntitySuggestions(domain, search, ENTITY_AUTOCOMPLETE_MAX_ITEMS);
+      if (requestSeq !== state.requestSeq) return;
+      if (remoteResults.length > 0) {
+        setEntityOptionsList(options, remoteResults);
+      }
+    } catch (_) {
+      // Keep local fallback options.
+    }
+  };
+
+  if (immediate) {
+    void run();
+    return;
+  }
+
+  state.timerId = window.setTimeout(() => {
+    state.timerId = null;
+    void run();
+  }, ENTITY_AUTOCOMPLETE_DEBOUNCE_MS);
 }
 
 async function loadLayout() {
@@ -637,23 +1066,16 @@ async function refreshStates() {
 }
 
 function renderEntityOptions() {
-  const inspectorType = selectedWidget()?.type || el.fType.value;
-  const inspectorOptions = listEntitiesForWidgetType(inspectorType);
-  el.entityOptions.innerHTML = "";
-  for (const entity of inspectorOptions.length > 0 ? inspectorOptions : editor.entities) {
-    const option = document.createElement("option");
-    option.value = entity.id;
-    option.label = `${entity.id} (${entity.name || entity.id})`;
-    el.entityOptions.appendChild(option);
-  }
+  const inspectorType = inspectorWidgetType();
+  const sliderDomain = inspectorSliderEntityDomain();
+  const inspectorOptions = listEntitiesForWidgetType(inspectorType, sliderDomain);
+  const primaryOptions = inspectorOptions.length > 0 ? inspectorOptions : editor.entities;
+  setEntityOptionsList(el.entityOptions, primaryOptions.slice(0, ENTITY_AUTOCOMPLETE_MAX_ITEMS));
 
-  el.sensorEntityOptions.innerHTML = "";
-  for (const entity of listEntitiesByDomain("sensor")) {
-    const option = document.createElement("option");
-    option.value = entity.id;
-    option.label = `${entity.id} (${entity.name || entity.id})`;
-    el.sensorEntityOptions.appendChild(option);
-  }
+  setEntityOptionsList(
+    el.sensorEntityOptions,
+    listEntitiesByDomain("sensor").slice(0, ENTITY_AUTOCOMPLETE_MAX_ITEMS),
+  );
 
   const secondaryEnabled = inspectorType === "heating_tile";
   if (el.fSecondaryEntityWrap) {
@@ -848,7 +1270,6 @@ function renderCanvas() {
 function renderInspector() {
   const widget = selectedWidget();
   if (!widget) {
-    el.fWidgetId.value = "";
     el.fTitle.value = "";
     el.fType.value = "sensor";
     el.fEntity.value = "";
@@ -869,6 +1290,9 @@ function renderInspector() {
     if (el.fSliderDirection) {
       el.fSliderDirection.value = DEFAULT_SLIDER_DIRECTION;
     }
+    if (el.fSliderEntityDomain) {
+      el.fSliderEntityDomain.value = DEFAULT_SLIDER_ENTITY_DOMAIN;
+    }
     if (el.fButtonAccentColor) {
       el.fButtonAccentColor.value = DEFAULT_BUTTON_ACCENT_COLOR;
     }
@@ -887,7 +1311,6 @@ function renderInspector() {
     renderEntityOptions();
     return;
   }
-  el.fWidgetId.value = widget.id;
   el.fTitle.value = widget.title || "";
   el.fType.value = widget.type;
   el.fEntity.value = widget.entity_id || "";
@@ -921,10 +1344,15 @@ function renderInspector() {
     }
   }
   if (isSlider) {
+    const sliderEntityDomain = normalizeSliderEntityDomain(widget.slider_entity_domain);
     const direction = normalizeSliderDirection(widget.slider_direction);
     const accent = normalizeHexColor(widget.slider_accent_color, DEFAULT_SLIDER_ACCENT_COLOR);
+    widget.slider_entity_domain = sliderEntityDomain;
     widget.slider_direction = direction;
     widget.slider_accent_color = accent;
+    if (el.fSliderEntityDomain) {
+      el.fSliderEntityDomain.value = sliderEntityDomain;
+    }
     if (el.fSliderDirection) {
       el.fSliderDirection.value = direction;
     }
@@ -932,6 +1360,9 @@ function renderInspector() {
       el.fSliderAccentColor.value = accent;
     }
   } else {
+    if (el.fSliderEntityDomain) {
+      el.fSliderEntityDomain.value = DEFAULT_SLIDER_ENTITY_DOMAIN;
+    }
     if (el.fSliderDirection) {
       el.fSliderDirection.value = DEFAULT_SLIDER_DIRECTION;
     }
@@ -1018,8 +1449,9 @@ function applyPageName() {
 function addWidget(type) {
   const page = selectedPage();
   if (!page) return;
-  const id = uniqueId(type, page.widgets);
-  const entityId = pickDefaultEntityForWidgetType(type);
+  const sliderDomain = DEFAULT_SLIDER_ENTITY_DOMAIN;
+  const id = createWidgetIdForPage(page, type);
+  const entityId = pickDefaultEntityForWidgetType(type, sliderDomain);
   const secondaryEntityId = type === "heating_tile" ? pickDefaultEntityForWidgetType("sensor") : "";
   const defaultW =
     type === "weather_3day" ? 360 : (type === "light_tile" || type === "heating_tile" || type === "weather_tile") ? 300 : 220;
@@ -1036,6 +1468,7 @@ function addWidget(type) {
     rect,
   };
   if (type === "slider") {
+    widget.slider_entity_domain = DEFAULT_SLIDER_ENTITY_DOMAIN;
     widget.slider_direction = DEFAULT_SLIDER_DIRECTION;
     widget.slider_accent_color = DEFAULT_SLIDER_ACCENT_COLOR;
   }
@@ -1062,37 +1495,48 @@ function deleteWidget() {
 
 function applyInspector() {
   const widget = selectedWidget();
-  const page = selectedPage();
-  if (!widget || !page) return;
+  if (!widget) return;
 
-  const proposedId = el.fWidgetId.value.trim();
-  if (proposedId && proposedId !== widget.id && page.widgets.some((w) => w.id === proposedId)) {
-    setStatus("Widget ID already exists in this page", true);
+  const widgetType = widget.type;
+  const sliderDomain = widgetType === "slider"
+    ? normalizeSliderEntityDomain(el.fSliderEntityDomain?.value)
+    : DEFAULT_SLIDER_ENTITY_DOMAIN;
+  const nextEntityId = el.fEntity.value.trim() || pickDefaultEntityForWidgetType(widgetType, sliderDomain);
+
+  if (!entityMatchesWidgetType({ id: nextEntityId }, widgetType, sliderDomain)) {
+    const allowedDomains = allowedEntityDomainsForWidgetType(widgetType, sliderDomain);
+    const allowedHint = allowedDomains.length ? allowedDomains.join(", ") : "the expected domain";
+    setStatus(`Entity must use domain: ${allowedHint}`, true);
     return;
   }
 
-  widget.id = proposedId || widget.id;
   widget.title = el.fTitle.value.trim();
-  widget.type = el.fType.value;
-  widget.entity_id = el.fEntity.value.trim() || pickDefaultEntityForWidgetType(widget.type);
-  if (widget.type === "heating_tile") {
-    widget.secondary_entity_id = el.fSecondaryEntity.value.trim() || pickDefaultEntityForWidgetType("sensor");
+  widget.entity_id = nextEntityId;
+  if (widgetType === "heating_tile") {
+    const secondaryEntityId = el.fSecondaryEntity.value.trim() || pickDefaultEntityForWidgetType("sensor");
+    if (!secondaryEntityId.startsWith("sensor.")) {
+      setStatus("Ist Entity must start with sensor.", true);
+      return;
+    }
+    widget.secondary_entity_id = secondaryEntityId;
   } else {
     widget.secondary_entity_id = "";
   }
-  if (widget.type === "button") {
+  if (widgetType === "button") {
     widget.button_accent_color = normalizeHexColor(el.fButtonAccentColor?.value, DEFAULT_BUTTON_ACCENT_COLOR);
   } else {
     delete widget.button_accent_color;
   }
-  if (widget.type === "slider") {
+  if (widgetType === "slider") {
+    widget.slider_entity_domain = sliderDomain;
     widget.slider_direction = normalizeSliderDirection(el.fSliderDirection?.value);
     widget.slider_accent_color = normalizeHexColor(el.fSliderAccentColor?.value, DEFAULT_SLIDER_ACCENT_COLOR);
   } else {
+    delete widget.slider_entity_domain;
     delete widget.slider_direction;
     delete widget.slider_accent_color;
   }
-  if (widget.type === "graph") {
+  if (widgetType === "graph") {
     widget.graph_line_color = normalizeHexColor(el.fGraphLineColor?.value, DEFAULT_GRAPH_LINE_COLOR);
     widget.graph_time_window_min = normalizeGraphTimeWindowMin(el.fGraphTimeWindowMin?.value);
     const graphPointCount = normalizeGraphPointCount(el.fGraphPointCount?.value);
@@ -1113,7 +1557,7 @@ function applyInspector() {
       w: Number(el.fW.value || widget.rect.w),
       h: Number(el.fH.value || widget.rect.h),
     },
-    widget.type
+    widgetType
   );
   editor.selectedWidgetId = widget.id;
   renderAll();
@@ -1192,6 +1636,7 @@ function bindUi() {
   el.applyInspectorBtn.onclick = applyInspector;
   el.reloadBtn.onclick = () => loadLayout();
   el.fType.onchange = () => {
+    const sliderDomain = normalizeSliderEntityDomain(el.fSliderEntityDomain?.value);
     if (el.buttonOptions) {
       el.buttonOptions.classList.toggle("hidden", el.fType.value !== "button");
     }
@@ -1211,6 +1656,9 @@ function bindUi() {
       }
     }
     if (el.fType.value === "slider") {
+      if (el.fSliderEntityDomain) {
+        el.fSliderEntityDomain.value = sliderDomain;
+      }
       if (el.fSliderDirection) {
         el.fSliderDirection.value = normalizeSliderDirection(el.fSliderDirection.value);
       }
@@ -1242,8 +1690,8 @@ function bindUi() {
     }
     renderEntityOptions();
     const currentEntity = el.fEntity.value.trim();
-    if (!entityMatchesWidgetType({ id: currentEntity }, el.fType.value)) {
-      el.fEntity.value = pickDefaultEntityForWidgetType(el.fType.value);
+    if (!entityMatchesWidgetType({ id: currentEntity }, el.fType.value, sliderDomain)) {
+      el.fEntity.value = pickDefaultEntityForWidgetType(el.fType.value, sliderDomain);
     }
     if (el.fType.value === "heating_tile") {
       const sensorEntity = el.fSecondaryEntity.value.trim();
@@ -1254,14 +1702,91 @@ function bindUi() {
       el.fSecondaryEntity.value = "";
     }
   };
+  if (el.fEntity) {
+    el.fEntity.oninput = () => scheduleEntityAutocomplete("primary");
+    el.fEntity.onfocus = () => scheduleEntityAutocomplete("primary", true);
+  }
+  if (el.fSliderEntityDomain) {
+    el.fSliderEntityDomain.onchange = () => {
+      el.fSliderEntityDomain.value = normalizeSliderEntityDomain(el.fSliderEntityDomain.value);
+      if (inspectorWidgetType() !== "slider") return;
+      scheduleEntityAutocomplete("primary", true);
+      const currentEntity = el.fEntity.value.trim();
+      const sliderDomain = inspectorSliderEntityDomain();
+      if (!entityMatchesWidgetType({ id: currentEntity }, "slider", sliderDomain)) {
+        el.fEntity.value = pickDefaultEntityForWidgetType("slider", sliderDomain);
+      }
+    };
+  }
+  if (el.fSecondaryEntity) {
+    el.fSecondaryEntity.oninput = () => scheduleEntityAutocomplete("secondary");
+    el.fSecondaryEntity.onfocus = () => scheduleEntityAutocomplete("secondary", true);
+  }
   el.reloadSettingsBtn.onclick = () => loadSettings();
-  el.scanWifiBtn.onclick = () => scanWifiNetworks();
+  el.scanWifiBtn.onclick = () => scanWifiNetworks("settings");
   el.settingsWifiScanResults.onchange = () => {
     const ssid = el.settingsWifiScanResults.value;
     if (ssid) {
       el.settingsWifiSsid.value = ssid;
     }
   };
+  if (el.settingsWifiCountryCode) {
+    el.settingsWifiCountryCode.oninput = () => {
+      const cleaned = (el.settingsWifiCountryCode.value || "")
+        .toUpperCase()
+        .replace(/[^A-Z]/g, "")
+        .slice(0, 2);
+      el.settingsWifiCountryCode.value = cleaned;
+    };
+  }
+  if (el.provScanWifiBtn) {
+    el.provScanWifiBtn.onclick = () => scanWifiNetworks("provisioning");
+  }
+  if (el.provWifiScanResults) {
+    el.provWifiScanResults.onchange = () => {
+      const ssid = el.provWifiScanResults.value;
+      if (ssid && el.provWifiSsid) {
+        el.provWifiSsid.value = ssid;
+      }
+    };
+  }
+  if (el.provWifiCountryCode) {
+    el.provWifiCountryCode.oninput = () => {
+      const cleaned = (el.provWifiCountryCode.value || "")
+        .toUpperCase()
+        .replace(/[^A-Z]/g, "")
+        .slice(0, 2);
+      el.provWifiCountryCode.value = cleaned;
+    };
+  }
+  if (el.provWifiShowPassword && el.provWifiPassword) {
+    el.provWifiShowPassword.onchange = () => {
+      el.provWifiPassword.type = el.provWifiShowPassword.checked ? "text" : "password";
+    };
+  }
+  if (el.provHaShowToken && el.provHaToken) {
+    el.provHaShowToken.onchange = () => {
+      el.provHaToken.type = el.provHaShowToken.checked ? "text" : "password";
+    };
+  }
+  if (el.provWifiSaveBtn) {
+    el.provWifiSaveBtn.onclick = async () => {
+      try {
+        await saveWifiProvisioning();
+      } catch (err) {
+        setProvisioningInfo("wifi", `Save failed: ${err.message}`, true);
+      }
+    };
+  }
+  if (el.provHaSaveBtn) {
+    el.provHaSaveBtn.onclick = async () => {
+      try {
+        await saveHaProvisioning();
+      } catch (err) {
+        setProvisioningInfo("ha", `Save failed: ${err.message}`, true);
+      }
+    };
+  }
   el.saveSettingsBtn.onclick = async () => {
     try {
       await saveSettings();
@@ -1298,11 +1823,24 @@ function bindUi() {
   };
 }
 
+async function startEditor() {
+  if (editor.editorStarted) return;
+  editor.editorStarted = true;
+  setProvisioningVisible(false);
+  setActivePane("layout");
+  await Promise.all([loadLayout(), loadEntities(), refreshStates()]);
+  window.setInterval(refreshStates, 5000);
+}
+
 async function bootstrap() {
   bindUi();
-  setActivePane("layout");
-  await Promise.all([loadLayout(), loadEntities(), refreshStates(), loadSettings(true)]);
-  window.setInterval(refreshStates, 5000);
+  const settings = await loadSettings(true);
+  const stage = provisioningStageForSettings(settings);
+  if (stage) {
+    showProvisioningStage(stage, settings);
+    return;
+  }
+  await startEditor();
 }
 
 bootstrap();

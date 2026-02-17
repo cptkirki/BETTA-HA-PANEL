@@ -20,6 +20,38 @@ body {
   background: radial-gradient(circle at 80% 10%, #1f3045 0%, var(--bg) 55%);
 }
 
+.provisioning-shell {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+}
+
+.provisioning-card {
+  width: min(520px, 100%);
+  background: linear-gradient(180deg, #102233 0%, #0d1a28 100%);
+  border: 1px solid #2b445b;
+  border-radius: 14px;
+  padding: 18px;
+}
+
+.provisioning-page {
+  display: grid;
+  gap: 10px;
+}
+
+.provisioning-page h1 {
+  margin: 0;
+  font-family: "Space Grotesk", "Segoe UI", sans-serif;
+  font-size: 22px;
+}
+
+.provisioning-subtitle {
+  margin: 0 0 4px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
 .shell {
   display: grid;
   grid-template-columns: minmax(320px, 360px) 1fr;
@@ -169,6 +201,10 @@ h2 {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
+}
+
+.row-inline {
+  align-items: center;
 }
 
 .btn {

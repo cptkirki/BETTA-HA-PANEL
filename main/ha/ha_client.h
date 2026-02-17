@@ -7,6 +7,7 @@
 typedef struct {
     const char *ws_url;
     const char *access_token;
+    bool rest_enabled;
 } ha_client_config_t;
 
 esp_err_t ha_client_start(const ha_client_config_t *cfg);

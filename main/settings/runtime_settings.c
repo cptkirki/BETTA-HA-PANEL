@@ -91,9 +91,11 @@ static esp_err_t write_public_settings_file(const runtime_settings_t *settings)
     cJSON_AddNumberToObject(root, "version", 1);
 
     cJSON_AddStringToObject(wifi, "ssid", settings->wifi_ssid);
+    cJSON_AddStringToObject(wifi, "country_code", settings->wifi_country_code);
     cJSON_AddItemToObject(root, "wifi", wifi);
 
     cJSON_AddStringToObject(ha, "ws_url", settings->ha_ws_url);
+    cJSON_AddBoolToObject(ha, "rest_enabled", settings->ha_rest_enabled);
     cJSON_AddItemToObject(root, "ha", ha);
 
     cJSON_AddStringToObject(time_cfg, "ntp_server", settings->ntp_server);
@@ -153,6 +155,7 @@ static esp_err_t parse_settings_json(
 
     if (cJSON_IsObject(wifi)) {
         json_copy_string(wifi, "ssid", out->wifi_ssid, sizeof(out->wifi_ssid));
+        json_copy_string(wifi, "country_code", out->wifi_country_code, sizeof(out->wifi_country_code));
         cJSON *pwd = cJSON_GetObjectItemCaseSensitive(wifi, "password");
         if (pwd != NULL) {
             if (out_legacy_wifi_password != NULL) {
@@ -164,6 +167,7 @@ static esp_err_t parse_settings_json(
         }
     } else {
         json_copy_string(root, "wifi_ssid", out->wifi_ssid, sizeof(out->wifi_ssid));
+        json_copy_string(root, "wifi_country_code", out->wifi_country_code, sizeof(out->wifi_country_code));
         cJSON *pwd = cJSON_GetObjectItemCaseSensitive(root, "wifi_password");
         if (pwd != NULL) {
             if (out_legacy_wifi_password != NULL) {
@@ -177,6 +181,10 @@ static esp_err_t parse_settings_json(
 
     if (cJSON_IsObject(ha)) {
         json_copy_string(ha, "ws_url", out->ha_ws_url, sizeof(out->ha_ws_url));
+        cJSON *rest_enabled = cJSON_GetObjectItemCaseSensitive(ha, "rest_enabled");
+        if (cJSON_IsBool(rest_enabled)) {
+            out->ha_rest_enabled = cJSON_IsTrue(rest_enabled);
+        }
         cJSON *token = cJSON_GetObjectItemCaseSensitive(ha, "access_token");
         if (token != NULL) {
             if (out_legacy_ha_access_token != NULL) {
@@ -197,6 +205,10 @@ static esp_err_t parse_settings_json(
                 strlcpy(out->ha_access_token, token->valuestring, sizeof(out->ha_access_token));
             }
         }
+    }
+    cJSON *rest_enabled = cJSON_GetObjectItemCaseSensitive(root, "ha_rest_enabled");
+    if (cJSON_IsBool(rest_enabled)) {
+        out->ha_rest_enabled = cJSON_IsTrue(rest_enabled);
     }
 
     if (cJSON_IsObject(time_cfg)) {
@@ -346,12 +358,14 @@ void runtime_settings_set_defaults(runtime_settings_t *out)
     if (!is_placeholder(APP_WIFI_PASSWORD)) {
         strlcpy(out->wifi_password, APP_WIFI_PASSWORD, sizeof(out->wifi_password));
     }
+    strlcpy(out->wifi_country_code, APP_WIFI_COUNTRY_CODE, sizeof(out->wifi_country_code));
     if (!is_placeholder(APP_HA_WS_URL)) {
         strlcpy(out->ha_ws_url, APP_HA_WS_URL, sizeof(out->ha_ws_url));
     }
     if (!is_placeholder(APP_HA_ACCESS_TOKEN)) {
         strlcpy(out->ha_access_token, APP_HA_ACCESS_TOKEN, sizeof(out->ha_access_token));
     }
+    out->ha_rest_enabled = false;
     strlcpy(out->ntp_server, APP_NTP_SERVER, sizeof(out->ntp_server));
     strlcpy(out->time_tz, APP_TIME_TZ, sizeof(out->time_tz));
 }
@@ -376,6 +390,9 @@ esp_err_t runtime_settings_load(runtime_settings_t *out)
     free(json);
     if (parse_err != ESP_OK) {
         return parse_err;
+    }
+    if (out->wifi_country_code[0] == '\0') {
+        strlcpy(out->wifi_country_code, APP_WIFI_COUNTRY_CODE, sizeof(out->wifi_country_code));
     }
 
     char nvs_wifi_password[APP_WIFI_PASSWORD_MAX_LEN] = {0};

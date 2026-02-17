@@ -16,6 +16,14 @@ config APP_WIFI_PASSWORD
         Password for your access point.
         Set empty only for open networks.
 
+config APP_WIFI_COUNTRY_CODE
+    string "Wi-Fi country code (ISO-3166 alpha-2)"
+    default "US"
+    help
+        Two-letter country code used for Wi-Fi regulatory domain
+        (for example US, DE, FR). This is used as default and can
+        be overridden at runtime in provisioning/settings.
+
 config APP_WIFI_WAIT_FOR_IP
     bool "Wait for IP before continuing boot"
     default y

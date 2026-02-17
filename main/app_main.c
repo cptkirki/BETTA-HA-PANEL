@@ -150,6 +150,7 @@ void app_main(void)
         wifi_mgr_config_t wifi_cfg = {
             .ssid = s_runtime_settings.wifi_ssid,
             .password = s_runtime_settings.wifi_password,
+            .country_code = s_runtime_settings.wifi_country_code,
             .wait_for_ip = APP_WIFI_WAIT_FOR_IP,
             .connect_timeout_ms = APP_WIFI_CONNECT_TIMEOUT_MS,
             .max_retries = APP_WIFI_MAX_RETRIES,
@@ -172,6 +173,7 @@ void app_main(void)
         wifi_mgr_ap_config_t ap_cfg = {
             .ssid = NULL,
             .password = APP_SETUP_AP_PASSWORD,
+            .country_code = s_runtime_settings.wifi_country_code,
             .channel = APP_SETUP_AP_CHANNEL,
             .max_connection = APP_SETUP_AP_MAX_CONNECTIONS,
         };
@@ -217,6 +219,7 @@ void app_main(void)
         ha_client_config_t ha_cfg = {
             .ws_url = s_runtime_settings.ha_ws_url,
             .access_token = s_runtime_settings.ha_access_token,
+            .rest_enabled = s_runtime_settings.ha_rest_enabled,
         };
         esp_err_t ha_err = ha_client_start(&ha_cfg);
         if (ha_err != ESP_OK) {

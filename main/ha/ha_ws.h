@@ -20,6 +20,11 @@ typedef struct {
     uint8_t op_code;
     int payload_len;
     int payload_offset;
+    esp_err_t tls_esp_err;
+    int tls_stack_err;
+    int tls_cert_flags;
+    int ws_handshake_status_code;
+    int sock_errno;
 } ha_ws_event_t;
 
 typedef void (*ha_ws_event_cb_t)(const ha_ws_event_t *event, void *user_ctx);

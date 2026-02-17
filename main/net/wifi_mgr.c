@@ -1,5 +1,6 @@
 ﻿#include "net/wifi_mgr.h"
 
+#include <ctype.h>
 #include <inttypes.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -38,6 +39,9 @@ static esp_netif_t *s_wifi_ap_netif = NULL;
 static bool s_setup_ap_active = false;
 static char s_setup_ap_ssid[APP_WIFI_SSID_MAX_LEN] = {0};
 static bool s_wifi_scan_in_progress = false;
+static wifi_config_t s_cached_sta_cfg = {0};
+static bool s_cached_sta_cfg_valid = false;
+static char s_wifi_country_code[APP_WIFI_COUNTRY_CODE_MAX_LEN] = {0};
 
 #if CONFIG_ESP_HOSTED_ENABLED
 static bool s_hosted_transport_ready = false;
@@ -104,6 +108,50 @@ static void wifi_mgr_build_default_setup_ssid(char *out, size_t out_len)
         return;
     }
     strlcpy(out, APP_SETUP_AP_SSID_PREFIX, out_len);
+}
+
+static bool wifi_mgr_normalize_country_code(const char *input, char *out, size_t out_len)
+{
+    if (input == NULL || out == NULL || out_len < APP_WIFI_COUNTRY_CODE_MAX_LEN) {
+        return false;
+    }
+    if (strlen(input) != 2) {
+        return false;
+    }
+    if (!isalpha((unsigned char)input[0]) || !isalpha((unsigned char)input[1])) {
+        return false;
+    }
+
+    out[0] = (char)toupper((unsigned char)input[0]);
+    out[1] = (char)toupper((unsigned char)input[1]);
+    out[2] = '\0';
+    return true;
+}
+
+static void wifi_mgr_set_country_code_from_input(const char *country_code)
+{
+    char normalized[APP_WIFI_COUNTRY_CODE_MAX_LEN] = {0};
+    const char *source = (country_code != NULL && country_code[0] != '\0') ? country_code : APP_WIFI_COUNTRY_CODE;
+
+    if (!wifi_mgr_normalize_country_code(source, normalized, sizeof(normalized))) {
+        strlcpy(normalized, "US", sizeof(normalized));
+    }
+    strlcpy(s_wifi_country_code, normalized, sizeof(s_wifi_country_code));
+}
+
+static esp_err_t wifi_mgr_apply_country_code(void)
+{
+    if (s_wifi_country_code[0] == '\0') {
+        wifi_mgr_set_country_code_from_input(NULL);
+    }
+    esp_err_t err = esp_wifi_set_country_code(s_wifi_country_code, true);
+    if (err != ESP_OK) {
+        ESP_LOGW(TAG_WIFI, "esp_wifi_set_country_code(%s) failed: %s",
+            s_wifi_country_code, esp_err_to_name(err));
+        return err;
+    }
+    ESP_LOGI(TAG_WIFI, "Wi-Fi country code set to %s", s_wifi_country_code);
+    return ESP_OK;
 }
 
 static const char *wifi_reason_to_str(uint8_t reason)
@@ -263,6 +311,7 @@ static void wifi_mgr_try_reconnect(uint8_t reason, int attempt_no)
         }
         esp_err_t start_err = esp_wifi_start();
         if (start_err == ESP_OK || start_err == ESP_ERR_INVALID_STATE) {
+            (void)wifi_mgr_apply_country_code();
             s_last_recover_stop_start_ms = now_ms;
             ESP_LOGW(TAG_WIFI, "Wi-Fi recovery step: stop/start (attempt %d, reason=%d)", attempt_no, (int)reason);
             (void)wifi_mgr_request_connect(true, "after-stop-start");
@@ -274,12 +323,8 @@ static void wifi_mgr_try_reconnect(uint8_t reason, int attempt_no)
     if (reason_known && (attempt_no % WIFI_RECOVER_DISC_CONN_PERIOD) == 0 &&
         (now_ms - s_last_recover_disc_conn_ms) >= WIFI_RECOVER_DISCONNECT_CONNECT_COOLDOWN_MS) {
         s_last_recover_disc_conn_ms = now_ms;
-        esp_err_t disc_err = esp_wifi_disconnect();
-        if (disc_err != ESP_OK && disc_err != ESP_ERR_WIFI_NOT_CONNECT) {
-            ESP_LOGW(TAG_WIFI, "esp_wifi_disconnect failed in recovery step: %s", esp_err_to_name(disc_err));
-        }
-        if (wifi_mgr_request_connect(true, "after-disconnect/connect")) {
-            ESP_LOGW(TAG_WIFI, "Wi-Fi recovery step: disconnect/connect (attempt %d, reason=%d)",
+        if (wifi_mgr_request_connect(true, "periodic-connect-nudge")) {
+            ESP_LOGW(TAG_WIFI, "Wi-Fi recovery step: periodic connect nudge (attempt %d, reason=%d)",
                 attempt_no, (int)reason);
         }
         return;
@@ -794,13 +839,14 @@ esp_err_t wifi_mgr_init(const wifi_mgr_config_t *cfg)
     s_wifi_connected = false;
     s_wifi_max_retries = (cfg->max_retries > 0) ? cfg->max_retries : WIFI_MAX_RETRIES_DEFAULT;
     ESP_LOGI(TAG_WIFI,
-        "Wi-Fi recovery policy: hard stop/start >=%d attempts, disconnect/connect every %d attempts (reason!=0)",
+        "Wi-Fi recovery policy: hard stop/start >=%d attempts, periodic connect nudge every %d attempts (reason!=0)",
         WIFI_RECOVER_HARD_ATTEMPT_THRESHOLD, WIFI_RECOVER_DISC_CONN_PERIOD);
 
     esp_err_t err = wifi_mgr_ensure_stack_initialized();
     if (err != ESP_OK) {
         return err;
     }
+    wifi_mgr_set_country_code_from_input(cfg->country_code);
     xEventGroupClearBits(s_wifi_event_group, WIFI_CONNECTED_BIT | WIFI_FAIL_BIT);
 
     if (s_wifi_sta_netif == NULL) {
@@ -817,6 +863,8 @@ esp_err_t wifi_mgr_init(const wifi_mgr_config_t *cfg)
         (cfg->password != NULL && cfg->password[0] != '\0') ? WIFI_AUTH_WPA2_PSK : WIFI_AUTH_OPEN;
     wifi_cfg.sta.pmf_cfg.capable = true;
     wifi_cfg.sta.pmf_cfg.required = false;
+    memcpy(&s_cached_sta_cfg, &wifi_cfg, sizeof(s_cached_sta_cfg));
+    s_cached_sta_cfg_valid = true;
 
     ESP_RETURN_ON_ERROR(esp_wifi_set_mode(WIFI_MODE_STA), TAG_WIFI, "esp_wifi_set_mode");
     wifi_mgr_set_setup_ap_state(false, NULL);
@@ -826,6 +874,7 @@ esp_err_t wifi_mgr_init(const wifi_mgr_config_t *cfg)
         ESP_LOGE(TAG_WIFI, "esp_wifi_start failed: %s", esp_err_to_name(err));
         return err;
     }
+    (void)wifi_mgr_apply_country_code();
 
 #if APP_WIFI_DISABLE_POWER_SAVE
     err = esp_wifi_set_ps(WIFI_PS_NONE);
@@ -868,11 +917,6 @@ static esp_err_t wifi_mgr_force_hosted_hard_recover(void)
         return wifi_mgr_force_reconnect_internal(false);
     }
 
-    wifi_mode_t previous_mode = WIFI_MODE_STA;
-    bool mode_captured = (esp_wifi_get_mode(&previous_mode) == ESP_OK);
-    wifi_config_t sta_cfg = {0};
-    bool sta_cfg_captured = (esp_wifi_get_config(WIFI_IF_STA, &sta_cfg) == ESP_OK);
-
     s_wifi_connected = false;
     s_last_connect_request_ms = 0;
     s_last_recover_disc_conn_ms = 0;
@@ -907,13 +951,6 @@ static esp_err_t wifi_mgr_force_hosted_hard_recover(void)
     }
 
     wifi_mode_t restore_mode = s_setup_ap_active ? WIFI_MODE_APSTA : WIFI_MODE_STA;
-    if (mode_captured) {
-        if (s_setup_ap_active) {
-            restore_mode = WIFI_MODE_APSTA;
-        } else if (previous_mode == WIFI_MODE_STA || previous_mode == WIFI_MODE_APSTA) {
-            restore_mode = WIFI_MODE_STA;
-        }
-    }
 
     esp_err_t mode_err = esp_wifi_set_mode(restore_mode);
     if (mode_err != ESP_OK && mode_err != ESP_ERR_INVALID_STATE) {
@@ -921,8 +958,8 @@ static esp_err_t wifi_mgr_force_hosted_hard_recover(void)
         return mode_err;
     }
 
-    if (sta_cfg_captured) {
-        esp_err_t cfg_err = esp_wifi_set_config(WIFI_IF_STA, &sta_cfg);
+    if (s_cached_sta_cfg_valid) {
+        esp_err_t cfg_err = esp_wifi_set_config(WIFI_IF_STA, &s_cached_sta_cfg);
         if (cfg_err != ESP_OK) {
             ESP_LOGW(TAG_WIFI, "esp_wifi_set_config(STA) failed during hard recover: %s", esp_err_to_name(cfg_err));
         }
@@ -933,6 +970,7 @@ static esp_err_t wifi_mgr_force_hosted_hard_recover(void)
         ESP_LOGE(TAG_WIFI, "esp_wifi_start failed during hard recover: %s", esp_err_to_name(start_err));
         return start_err;
     }
+    (void)wifi_mgr_apply_country_code();
 
 #if APP_WIFI_DISABLE_POWER_SAVE
     esp_err_t ps_err = esp_wifi_set_ps(WIFI_PS_NONE);
@@ -968,24 +1006,32 @@ static esp_err_t wifi_mgr_force_reconnect_internal(bool allow_transport_escalati
         xEventGroupClearBits(s_wifi_event_group, WIFI_CONNECTED_BIT);
     }
 
-    esp_err_t err = esp_wifi_disconnect();
-    if (err != ESP_OK && err != ESP_ERR_WIFI_NOT_CONNECT) {
-        ESP_LOGW(TAG_WIFI, "esp_wifi_disconnect failed during forced reconnect: %s", esp_err_to_name(err));
-#if CONFIG_ESP_HOSTED_ENABLED
-        if (allow_transport_escalation) {
-            ESP_LOGW(TAG_WIFI,
-                "Escalating forced reconnect failure (disconnect step) to C6 hard recover");
-            return wifi_mgr_force_hosted_hard_recover();
-        }
-#endif
-        return err;
-    }
-
     if (!wifi_mgr_request_connect(true, "force-reconnect")) {
+        int64_t now_ms = esp_timer_get_time() / 1000;
+        if ((now_ms - s_last_recover_stop_start_ms) >= WIFI_RECOVER_STOP_START_COOLDOWN_MS) {
+            esp_err_t stop_err = esp_wifi_stop();
+            if (stop_err != ESP_OK && stop_err != ESP_ERR_WIFI_NOT_INIT &&
+                stop_err != ESP_ERR_WIFI_NOT_STARTED && stop_err != ESP_ERR_INVALID_STATE) {
+                ESP_LOGW(TAG_WIFI, "esp_wifi_stop failed during forced reconnect fallback: %s",
+                    esp_err_to_name(stop_err));
+            }
+            esp_err_t start_err = esp_wifi_start();
+            if (start_err == ESP_OK || start_err == ESP_ERR_INVALID_STATE) {
+                (void)wifi_mgr_apply_country_code();
+                s_last_recover_stop_start_ms = now_ms;
+                if (wifi_mgr_request_connect(true, "force-reconnect-after-stop-start")) {
+                    ESP_LOGW(TAG_WIFI, "Forced Wi-Fi reconnect fallback: stop/start + connect");
+                    return ESP_OK;
+                }
+            } else {
+                ESP_LOGW(TAG_WIFI, "esp_wifi_start failed during forced reconnect fallback: %s",
+                    esp_err_to_name(start_err));
+            }
+        }
 #if CONFIG_ESP_HOSTED_ENABLED
         if (allow_transport_escalation) {
             ESP_LOGW(TAG_WIFI,
-                "Escalating forced reconnect failure (connect step) to C6 hard recover");
+                "Escalating forced reconnect failure to C6 hard recover");
             return wifi_mgr_force_hosted_hard_recover();
         }
 #endif
@@ -1022,6 +1068,7 @@ esp_err_t wifi_mgr_start_setup_ap(const wifi_mgr_ap_config_t *cfg)
     if (err != ESP_OK) {
         return err;
     }
+    wifi_mgr_set_country_code_from_input((cfg != NULL) ? cfg->country_code : NULL);
 
     if (s_wifi_ap_netif == NULL) {
         s_wifi_ap_netif = esp_netif_create_default_wifi_ap();
@@ -1070,6 +1117,7 @@ esp_err_t wifi_mgr_start_setup_ap(const wifi_mgr_ap_config_t *cfg)
         ESP_LOGE(TAG_WIFI, "esp_wifi_start failed in AP setup mode: %s", esp_err_to_name(err));
         return err;
     }
+    (void)wifi_mgr_apply_country_code();
 
     s_wifi_connected = false;
     if (s_wifi_event_group != NULL) {
@@ -1204,6 +1252,7 @@ esp_err_t wifi_mgr_scan(wifi_mgr_scan_result_t *results, size_t max_results, siz
     if (err != ESP_OK && err != ESP_ERR_INVALID_STATE) {
         goto cleanup;
     }
+    (void)wifi_mgr_apply_country_code();
     err = ESP_OK;
 
     if (wait_for_sta_start) {

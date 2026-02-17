@@ -105,7 +105,14 @@ esp_err_t http_server_start(void)
 
     httpd_config_t cfg = HTTPD_DEFAULT_CONFIG();
     cfg.server_port = APP_HTTP_PORT;
-    cfg.task_priority = (APP_HA_TASK_PRIO > 1) ? (APP_HA_TASK_PRIO - 1) : 1;
+    int http_task_prio = APP_UI_TASK_PRIO + 1;
+    if (http_task_prio >= APP_HA_TASK_PRIO) {
+        http_task_prio = APP_HA_TASK_PRIO - 1;
+    }
+    if (http_task_prio < 1) {
+        http_task_prio = 1;
+    }
+    cfg.task_priority = http_task_prio;
     cfg.max_uri_handlers = 20;
     cfg.max_open_sockets = 12;
     cfg.lru_purge_enable = true;

@@ -110,7 +110,7 @@ static widget_size_limits_t widget_size_limits_for_type(const char *type)
         limits.max_w = 480;
         limits.max_h = 320;
     } else if (strcmp(type, "slider") == 0) {
-        limits.min_w = 180;
+        limits.min_w = 100;
         limits.min_h = 100;
     } else if (strcmp(type, "graph") == 0) {
         limits.min_w = 220;

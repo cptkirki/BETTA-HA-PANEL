@@ -28,8 +28,8 @@ static char s_ws_headers[192] = {0};
 static char s_last_resolved_host[128] = {0};
 static char s_last_resolved_ip[64] = {0};
 
-#define HA_WS_TASK_STACK 8192
-#define HA_WS_BUFFER_SIZE 4096
+#define HA_WS_TASK_STACK 12288
+#define HA_WS_BUFFER_SIZE 16384
 #define HA_WS_CTRL_PING_INTERVAL_SEC 25
 #define HA_WS_CTRL_PINGPONG_TIMEOUT_SEC 15
 #define HA_WS_TCP_KEEPALIVE_IDLE_SEC 30
@@ -178,7 +178,8 @@ static const char *build_runtime_uri(const char *uri)
 }
 
 static void ws_dispatch_event(
-    ha_ws_event_type_t type, const char *data, int len, bool fin, uint8_t op_code, int payload_len, int payload_offset)
+    ha_ws_event_type_t type, const char *data, int len, bool fin, uint8_t op_code, int payload_len, int payload_offset,
+    esp_err_t tls_esp_err, int tls_stack_err, int tls_cert_flags, int ws_handshake_status_code, int sock_errno)
 {
     if (s_cfg.event_cb == NULL) {
         return;
@@ -191,6 +192,11 @@ static void ws_dispatch_event(
         .op_code = op_code,
         .payload_len = payload_len,
         .payload_offset = payload_offset,
+        .tls_esp_err = tls_esp_err,
+        .tls_stack_err = tls_stack_err,
+        .tls_cert_flags = tls_cert_flags,
+        .ws_handshake_status_code = ws_handshake_status_code,
+        .sock_errno = sock_errno,
     };
     s_cfg.event_cb(&event, s_cfg.user_ctx);
 }
@@ -206,12 +212,12 @@ static void ws_event_handler(void *arg, esp_event_base_t event_base, int32_t eve
     case WEBSOCKET_EVENT_CONNECTED:
         s_connected = true;
         ESP_LOGI(TAG_HA_WS, "Connected");
-        ws_dispatch_event(HA_WS_EVENT_CONNECTED, NULL, 0, true, 0, 0, 0);
+        ws_dispatch_event(HA_WS_EVENT_CONNECTED, NULL, 0, true, 0, 0, 0, ESP_OK, 0, 0, 0, 0);
         break;
     case WEBSOCKET_EVENT_DISCONNECTED:
         s_connected = false;
         ESP_LOGW(TAG_HA_WS, "Disconnected");
-        ws_dispatch_event(HA_WS_EVENT_DISCONNECTED, NULL, 0, true, 0, 0, 0);
+        ws_dispatch_event(HA_WS_EVENT_DISCONNECTED, NULL, 0, true, 0, 0, 0, ESP_OK, 0, 0, 0, 0);
         break;
     case WEBSOCKET_EVENT_DATA:
         if (data != NULL && data->op_code == WS_TRANSPORT_OPCODES_PING) {
@@ -223,12 +229,25 @@ static void ws_event_handler(void *arg, esp_event_base_t event_base, int32_t eve
         if (data != NULL &&
             (data->op_code == WS_TRANSPORT_OPCODES_TEXT || data->op_code == WS_TRANSPORT_OPCODES_CONT)) {
             ws_dispatch_event(HA_WS_EVENT_TEXT, (const char *)data->data_ptr, data->data_len, data->fin,
-                data->op_code, data->payload_len, data->payload_offset);
+                data->op_code, data->payload_len, data->payload_offset, ESP_OK, 0, 0, 0, 0);
         }
         break;
     case WEBSOCKET_EVENT_ERROR:
+        esp_err_t tls_esp_err = ESP_OK;
+        int tls_stack_err = 0;
+        int tls_cert_flags = 0;
+        int ws_handshake_status_code = 0;
+        int sock_errno = 0;
+        if (data != NULL) {
+            tls_esp_err = data->error_handle.esp_tls_last_esp_err;
+            tls_stack_err = data->error_handle.esp_tls_stack_err;
+            tls_cert_flags = data->error_handle.esp_tls_cert_verify_flags;
+            ws_handshake_status_code = data->error_handle.esp_ws_handshake_status_code;
+            sock_errno = data->error_handle.esp_transport_sock_errno;
+        }
         ESP_LOGE(TAG_HA_WS, "WebSocket error");
-        ws_dispatch_event(HA_WS_EVENT_ERROR, NULL, 0, true, 0, 0, 0);
+        ws_dispatch_event(HA_WS_EVENT_ERROR, NULL, 0, true, 0, 0, 0,
+            tls_esp_err, tls_stack_err, tls_cert_flags, ws_handshake_status_code, sock_errno);
         break;
     default:
         break;
@@ -323,7 +342,7 @@ esp_err_t ha_ws_start(const ha_ws_config_t *cfg)
 #else
     ESP_LOGW(TAG_HA_WS, "esp_websocket_client component not available, HA websocket disabled");
     s_connected = false;
-    ws_dispatch_event(HA_WS_EVENT_ERROR, NULL, 0, true, 0, 0, 0);
+    ws_dispatch_event(HA_WS_EVENT_ERROR, NULL, 0, true, 0, 0, 0, ESP_ERR_NOT_SUPPORTED, 0, 0, 0, 0);
     free(s_uri_owned);
     s_uri_owned = NULL;
     return ESP_ERR_NOT_SUPPORTED;

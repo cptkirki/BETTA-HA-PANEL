@@ -24,11 +24,20 @@
 #include "ui/theme/theme_default.h"
 #include "util/log_tags.h"
 
+#define UI_MODEL_RECONCILE_INTERVAL_MS 250
+
 static ui_widget_instance_t s_widgets[APP_MAX_WIDGETS_TOTAL];
 static size_t s_widget_count = 0;
 static TaskHandle_t s_ui_task = NULL;
 static bool s_initialized = false;
 static int64_t s_last_topbar_refresh_ms = 0;
+static int64_t s_last_model_reconcile_ms = 0;
+static uint32_t s_last_model_revision = 0;
+static bool s_model_reconcile_pending = false;
+static bool s_pending_state_reconcile = false;
+static bool s_pending_topbar_refresh = false;
+static uint32_t s_deferred_event_count = 0;
+static int64_t s_deferred_event_log_ms = 0;
 #if APP_UI_TEST_WEATHER_ICON_OVERLAY
 static lv_obj_t *s_weather_icon_overlay = NULL;
 #endif
@@ -62,8 +71,8 @@ static ui_widget_size_limits_t ui_runtime_widget_size_limits(const char *type)
         limits.max_w = 480;
         limits.max_h = 320;
     } else if (strcmp(type, "slider") == 0) {
-        limits.min_w = 60;
-        limits.min_h = 60;
+        limits.min_w = 100;
+        limits.min_h = 100;
     } else if (strcmp(type, "graph") == 0) {
         limits.min_w = 220;
         limits.min_h = 140;
@@ -392,6 +401,21 @@ static void ui_runtime_handle_event(const app_event_t *event)
 
     bool needs_lock = (event->type != EV_LAYOUT_UPDATED);
     if (needs_lock && !display_lock(0)) {
+        if (event->type == EV_HA_STATE_CHANGED || event->type == EV_HA_CONNECTED) {
+            s_pending_state_reconcile = true;
+            s_pending_topbar_refresh = true;
+        } else if (event->type == EV_HA_DISCONNECTED) {
+            s_pending_topbar_refresh = true;
+        }
+
+        s_deferred_event_count++;
+        int64_t now_ms = esp_timer_get_time() / 1000;
+        if ((now_ms - s_deferred_event_log_ms) >= 5000) {
+            ESP_LOGW(TAG_UI, "Deferred UI event processing due to display lock contention (deferred=%u)",
+                (unsigned)s_deferred_event_count);
+            s_deferred_event_log_ms = now_ms;
+            s_deferred_event_count = 0;
+        }
         return;
     }
 
@@ -434,6 +458,34 @@ static void ui_runtime_task(void *arg)
         }
 
         int64_t now_ms = esp_timer_get_time() / 1000;
+        uint32_t model_revision = ha_model_state_revision();
+        if (model_revision != s_last_model_revision) {
+            s_last_model_revision = model_revision;
+            s_model_reconcile_pending = true;
+        }
+
+        if ((s_pending_state_reconcile || s_pending_topbar_refresh) && display_lock(20)) {
+            if (s_pending_topbar_refresh) {
+                ui_runtime_refresh_topbar();
+                s_pending_topbar_refresh = false;
+            }
+            if (s_pending_state_reconcile) {
+                /* Reconcile all states after lock contention so UI never stays stale. */
+                ui_runtime_apply_all_states_preserve_missing();
+                s_pending_state_reconcile = false;
+            }
+            display_unlock();
+        }
+
+        if (s_model_reconcile_pending && (now_ms - s_last_model_reconcile_ms) >= UI_MODEL_RECONCILE_INTERVAL_MS &&
+            display_lock(20)) {
+            /* Protect against missed per-entity events under burst: periodically reconcile from model snapshot. */
+            ui_runtime_apply_all_states_preserve_missing();
+            display_unlock();
+            s_model_reconcile_pending = false;
+            s_last_model_reconcile_ms = now_ms;
+        }
+
         if ((now_ms - s_last_topbar_refresh_ms) >= 1000) {
             if (display_lock(20)) {
                 ui_runtime_refresh_topbar();
@@ -457,6 +509,13 @@ esp_err_t ui_runtime_init(void)
     ui_runtime_refresh_topbar();
     display_unlock();
     s_last_topbar_refresh_ms = esp_timer_get_time() / 1000;
+    s_last_model_reconcile_ms = s_last_topbar_refresh_ms;
+    s_last_model_revision = ha_model_state_revision();
+    s_model_reconcile_pending = false;
+    s_pending_state_reconcile = false;
+    s_pending_topbar_refresh = false;
+    s_deferred_event_count = 0;
+    s_deferred_event_log_ms = 0;
     s_initialized = true;
     return ESP_OK;
 }

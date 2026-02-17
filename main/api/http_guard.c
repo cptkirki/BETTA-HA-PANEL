@@ -4,6 +4,7 @@
 #include <stddef.h>
 #include <stdbool.h>
 #include <stdint.h>
+#include <string.h>
 
 #include "esp_log.h"
 #include "esp_timer.h"
@@ -14,10 +15,12 @@
 
 #include "util/log_tags.h"
 
-#define HTTP_GUARD_MAX_ACTIVE_REQUESTS 2
+#define HTTP_GUARD_MAX_ACTIVE_REQUESTS 4
 #define HTTP_GUARD_MAX_CLIENTS 16
-#define HTTP_GUARD_RATE_PER_SEC 5
-#define HTTP_GUARD_BURST 10
+#define HTTP_GUARD_RATE_PER_SEC 12
+#define HTTP_GUARD_BURST 24
+#define HTTP_GUARD_MAX_INFLIGHT_PER_CLIENT_GET 3
+#define HTTP_GUARD_MAX_INFLIGHT_PER_CLIENT_NON_GET 1
 
 typedef struct {
     bool used;
@@ -27,10 +30,18 @@ typedef struct {
     int64_t last_seen_ms;
 } http_guard_bucket_t;
 
+typedef struct {
+    bool used;
+    uint32_t key;
+    uint8_t in_flight;
+    int64_t last_seen_ms;
+} http_guard_active_t;
+
 static SemaphoreHandle_t s_active_sem = NULL;
 static SemaphoreHandle_t s_guard_lock = NULL;
 static bool s_inited = false;
 static http_guard_bucket_t s_buckets[HTTP_GUARD_MAX_CLIENTS];
+static http_guard_active_t s_active_clients[HTTP_GUARD_MAX_CLIENTS];
 
 static int64_t now_ms(void)
 {
@@ -73,6 +84,14 @@ static uint32_t req_client_key(httpd_req_t *req)
 #endif
 
     return 0;
+}
+
+static bool is_api_request(const httpd_req_t *req)
+{
+    if (req == NULL || req->uri[0] == '\0') {
+        return false;
+    }
+    return strncmp(req->uri, "/api/", 5) == 0;
 }
 
 static bool rate_limit_allow(uint32_t client_key)
@@ -132,6 +151,64 @@ static bool rate_limit_allow(uint32_t client_key)
     return true;
 }
 
+static bool active_try_acquire(uint32_t client_key, uint8_t in_flight_limit)
+{
+    const int64_t t_now = now_ms();
+    int idx = -1;
+    int free_idx = -1;
+    int oldest_idx = -1;
+    int64_t oldest_seen = INT64_MAX;
+
+    for (int i = 0; i < HTTP_GUARD_MAX_CLIENTS; i++) {
+        if (s_active_clients[i].used) {
+            if (s_active_clients[i].key == client_key) {
+                idx = i;
+                break;
+            }
+            if (s_active_clients[i].in_flight == 0 && s_active_clients[i].last_seen_ms < oldest_seen) {
+                oldest_seen = s_active_clients[i].last_seen_ms;
+                oldest_idx = i;
+            }
+        } else if (free_idx < 0) {
+            free_idx = i;
+        }
+    }
+
+    if (idx < 0) {
+        idx = (free_idx >= 0) ? free_idx : oldest_idx;
+        if (idx < 0) {
+            return false;
+        }
+        s_active_clients[idx].used = true;
+        s_active_clients[idx].key = client_key;
+        s_active_clients[idx].in_flight = 0;
+    }
+
+    if (s_active_clients[idx].in_flight >= in_flight_limit) {
+        s_active_clients[idx].last_seen_ms = t_now;
+        return false;
+    }
+
+    s_active_clients[idx].in_flight++;
+    s_active_clients[idx].last_seen_ms = t_now;
+    return true;
+}
+
+static void active_release(uint32_t client_key)
+{
+    const int64_t t_now = now_ms();
+    for (int i = 0; i < HTTP_GUARD_MAX_CLIENTS; i++) {
+        if (!s_active_clients[i].used || s_active_clients[i].key != client_key) {
+            continue;
+        }
+        if (s_active_clients[i].in_flight > 0) {
+            s_active_clients[i].in_flight--;
+        }
+        s_active_clients[i].last_seen_ms = t_now;
+        return;
+    }
+}
+
 static esp_err_t send_busy(httpd_req_t *req, const char *status, const char *message)
 {
     httpd_resp_set_status(req, status);
@@ -166,6 +243,7 @@ esp_err_t http_guard_init(void)
         }
         for (int i = 0; i < HTTP_GUARD_MAX_CLIENTS; i++) {
             s_buckets[i].used = false;
+            s_active_clients[i].used = false;
         }
         s_inited = true;
     }
@@ -186,21 +264,45 @@ esp_err_t http_guard_handle(httpd_req_t *req, http_guard_handler_t next_handler)
     }
 
     uint32_t key = req_client_key(req);
-    bool allow_rate = false;
+    bool allow_rate = true;
+    bool allow_concurrency = true;
+    bool enforce_api_limits = is_api_request(req);
+    uint8_t in_flight_limit = HTTP_GUARD_MAX_INFLIGHT_PER_CLIENT_NON_GET;
+    if (req->method == HTTP_GET) {
+        in_flight_limit = HTTP_GUARD_MAX_INFLIGHT_PER_CLIENT_GET;
+    }
 
     xSemaphoreTake(s_guard_lock, portMAX_DELAY);
-    allow_rate = rate_limit_allow(key);
+    if (enforce_api_limits) {
+        allow_rate = rate_limit_allow(key);
+        if (allow_rate) {
+            allow_concurrency = active_try_acquire(key, in_flight_limit);
+        }
+    }
     xSemaphoreGive(s_guard_lock);
 
     if (!allow_rate) {
         return send_busy(req, "429 Too Many Requests", "Too many requests");
     }
+    if (!allow_concurrency) {
+        return send_busy(req, "429 Too Many Requests", "Too many concurrent requests");
+    }
 
     if (xSemaphoreTake(s_active_sem, 0) != pdTRUE) {
+        if (enforce_api_limits) {
+            xSemaphoreTake(s_guard_lock, portMAX_DELAY);
+            active_release(key);
+            xSemaphoreGive(s_guard_lock);
+        }
         return send_busy(req, "503 Service Unavailable", "Server busy");
     }
 
     esp_err_t err = next_handler(req);
     xSemaphoreGive(s_active_sem);
+    if (enforce_api_limits) {
+        xSemaphoreTake(s_guard_lock, portMAX_DELAY);
+        active_release(key);
+        xSemaphoreGive(s_guard_lock);
+    }
     return err;
 }

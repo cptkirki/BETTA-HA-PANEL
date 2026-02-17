@@ -7,7 +7,55 @@
   <link rel="stylesheet" href="/styles.css" />
 </head>
 <body>
-  <div class="shell">
+  <div id="provisioningRoot" class="provisioning-shell hidden">
+    <div class="provisioning-card">
+      <div id="provisioningWifiPage" class="provisioning-page hidden">
+        <h1>Wi-Fi Provisioning</h1>
+        <p class="provisioning-subtitle">Verbinde das Panel mit deinem WLAN.</p>
+        <label>SSID
+          <input id="provWifiSsid" type="text" placeholder="MyWiFi" maxlength="32" />
+        </label>
+        <label>Country Code
+          <input id="provWifiCountryCode" type="text" list="wifiCountryCodeList" placeholder="US" maxlength="2" />
+        </label>
+        <div class="row">
+          <button id="provScanWifiBtn" class="btn small" type="button">Scan</button>
+          <select id="provWifiScanResults">
+            <option value="">No scan yet</option>
+          </select>
+        </div>
+        <div id="provWifiScanInfo" class="meta">Click "Scan" to list nearby networks.</div>
+        <label>Password
+          <input id="provWifiPassword" type="password" placeholder="Wi-Fi password" maxlength="64" />
+        </label>
+        <label class="row row-inline">
+          <input id="provWifiShowPassword" type="checkbox" />
+          <span>Password anzeigen</span>
+        </label>
+        <div id="provWifiInfo" class="meta"></div>
+        <button id="provWifiSaveBtn" class="btn primary" type="button">Save + Reboot</button>
+      </div>
+
+      <div id="provisioningHaPage" class="provisioning-page hidden">
+        <h1>HA Provisioning</h1>
+        <p class="provisioning-subtitle">Verbinde das Panel mit Home Assistant.</p>
+        <label>WebSocket URL (ws:// oder wss://)
+          <input id="provHaUrl" type="text" placeholder="wss://homeassistant.local:8123/api/websocket" maxlength="255" />
+        </label>
+        <label>Long-lived Access Token
+          <input id="provHaToken" type="password" placeholder="Home Assistant token" maxlength="511" />
+        </label>
+        <label class="row row-inline">
+          <input id="provHaShowToken" type="checkbox" />
+          <span>Token anzeigen</span>
+        </label>
+        <div id="provHaInfo" class="meta"></div>
+        <button id="provHaSaveBtn" class="btn primary" type="button">Save + Reboot</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="editorShell" class="shell">
     <aside class="sidebar">
       <header class="sidebar-header">
         <h1>Smart86 Editor</h1>
@@ -72,20 +120,17 @@
           </div>
           <div id="inspectorSectionBody" class="section-body">
             <div class="form">
-              <label>Widget ID <input id="fWidgetId" type="text" /></label>
               <label>Title <input id="fTitle" type="text" /></label>
-              <label>Type
-                <select id="fType">
-                  <option value="sensor">sensor</option>
-                  <option value="button">button</option>
-                  <option value="slider">slider</option>
-                  <option value="graph">graph</option>
-                  <option value="light_tile">light_tile</option>
-                  <option value="heating_tile">heating_tile</option>
-                  <option value="weather_tile">weather_tile</option>
-                  <option value="weather_3day">weather_3day</option>
-                </select>
-              </label>
+              <select id="fType" hidden>
+                <option value="sensor">sensor</option>
+                <option value="button">button</option>
+                <option value="slider">slider</option>
+                <option value="graph">graph</option>
+                <option value="light_tile">light_tile</option>
+                <option value="heating_tile">heating_tile</option>
+                <option value="weather_tile">weather_tile</option>
+                <option value="weather_3day">weather_3day</option>
+              </select>
               <label>Entity
                 <input id="fEntity" type="text" list="entityOptions" />
                 <datalist id="entityOptions"></datalist>
@@ -100,6 +145,14 @@
                 </label>
               </div>
               <div id="sliderOptions" class="slider-options hidden">
+                <label>Slider Entity Type
+                  <select id="fSliderEntityDomain">
+                    <option value="auto">auto (light, media_player, cover)</option>
+                    <option value="light">light</option>
+                    <option value="media_player">media_player</option>
+                    <option value="cover">cover</option>
+                  </select>
+                </label>
                 <label>Slider Direction
                   <select id="fSliderDirection">
                     <option value="auto">auto (width/height based)</option>
@@ -143,6 +196,9 @@
             <label>SSID
               <input id="settingsWifiSsid" type="text" placeholder="MyWiFi" maxlength="32" />
             </label>
+            <label>Country Code
+              <input id="settingsWifiCountryCode" type="text" list="wifiCountryCodeList" placeholder="US" maxlength="2" />
+            </label>
             <div class="row">
               <button id="scanWifiBtn" class="btn small" type="button">Scan Wi-Fi</button>
               <select id="settingsWifiScanResults">
@@ -165,6 +221,10 @@
             </label>
             <label>Long-lived Access Token
               <textarea id="settingsHaToken" placeholder="Leave empty to keep existing token" maxlength="511"></textarea>
+            </label>
+            <label class="row">
+              <input id="settingsHaRestEnabled" type="checkbox" />
+              <span>Enable HA REST fallback (Default: Off, WS-only preferred)</span>
             </label>
             <div id="settingsHaInfo" class="meta"></div>
           </div>
@@ -227,6 +287,31 @@
       </div>
     </main>
   </div>
+  <datalist id="wifiCountryCodeList">
+    <option value="US"></option>
+    <option value="DE"></option>
+    <option value="AT"></option>
+    <option value="CH"></option>
+    <option value="NL"></option>
+    <option value="FR"></option>
+    <option value="IT"></option>
+    <option value="ES"></option>
+    <option value="GB"></option>
+    <option value="PL"></option>
+    <option value="SE"></option>
+    <option value="NO"></option>
+    <option value="DK"></option>
+    <option value="FI"></option>
+    <option value="CZ"></option>
+    <option value="PT"></option>
+    <option value="IE"></option>
+    <option value="BE"></option>
+    <option value="JP"></option>
+    <option value="CN"></option>
+    <option value="KR"></option>
+    <option value="AU"></option>
+    <option value="CA"></option>
+  </datalist>
   <script src="/app.js"></script>
 </body>
 </html>
