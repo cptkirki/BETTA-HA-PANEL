@@ -1,4 +1,4 @@
-# BETAA HA Panel
+# BETTA HA Panel
 A runtime configurable Home Assistant dashboard for the ESP32-P4 Smart 86 Box development board.
 
 ## Projektbeschreibung
