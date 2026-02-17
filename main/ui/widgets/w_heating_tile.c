@@ -416,13 +416,14 @@ static void w_heating_tile_card_event_cb(lv_event_t *event)
         bool prev_is_on = ctx->is_on;
         char prev_status[sizeof(ctx->status_text)] = {0};
         heating_copy_text(prev_status, sizeof(prev_status), ctx->status_text);
-
-        ctx->is_on = !ctx->is_on;
-        heating_copy_text(ctx->status_text, sizeof(ctx->status_text), ctx->is_on ? "on" : "off");
-        heating_apply_from_ctx(card, ctx);
+        bool next_is_on = !ctx->is_on;
 
         esp_err_t err = ui_bindings_toggle_entity(ctx->climate_entity_id);
-        if (err != ESP_OK) {
+        if (err == ESP_OK) {
+            ctx->is_on = next_is_on;
+            heating_copy_text(ctx->status_text, sizeof(ctx->status_text), ctx->is_on ? "on" : "off");
+            heating_apply_from_ctx(card, ctx);
+        } else {
             ctx->is_on = prev_is_on;
             heating_copy_text(ctx->status_text, sizeof(ctx->status_text), prev_status);
             heating_apply_from_ctx(card, ctx);

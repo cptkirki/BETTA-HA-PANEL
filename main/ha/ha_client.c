@@ -163,7 +163,7 @@ static const size_t HA_TRIGGER_SUBSCRIBE_MAX_ENTITIES = 64;
 static const int HA_WS_RX_DRAIN_BUDGET = 32;
 static const uint8_t HA_PING_TIMEOUT_STRIKES_TO_RECONNECT = 2;
 static const bool HA_USE_TRIGGER_SUBSCRIPTION = true;
-static const bool HA_USE_WS_ENTITIES_SUBSCRIPTION = true;
+static const bool HA_USE_WS_ENTITIES_SUBSCRIPTION = (APP_HA_USE_WS_ENTITIES_SUBSCRIPTION != 0);
 static const TickType_t HA_CLIENT_TASK_DELAY_TICKS = pdMS_TO_TICKS(30);
 static const int64_t HA_WS_WEATHER_PRIORITY_GRACE_MS = 15000;
 static const int HA_WS_TLS_ERR_BAD_INPUT_DATA = 0x7100;
@@ -1872,8 +1872,17 @@ static void ha_client_trace_service_state_changed(const char *entity_id, const c
     xSemaphoreGive(s_client.mutex);
 
     if (best_idx < 0) {
+#if APP_HA_ROUTE_TRACE_LOG
+        ESP_LOGI(TAG_HA_CLIENT, "route ws->panel entity=%s state=%s source=external", entity_id,
+            (new_state != NULL && new_state[0] != '\0') ? new_state : "?");
+#endif
         return;
     }
+
+#if APP_HA_ROUTE_TRACE_LOG
+    ESP_LOGI(TAG_HA_CLIENT, "route ws->panel entity=%s state=%s source=matched_service svc=%u", entity_id,
+        (new_state != NULL && new_state[0] != '\0') ? new_state : "?", (unsigned)id);
+#endif
 
     int64_t queue_to_state_ms = (queued_ms > 0 && now_ms >= queued_ms) ? (now_ms - queued_ms) : 0;
     int64_t send_to_state_ms = (sent_ms > 0 && now_ms >= sent_ms) ? (now_ms - sent_ms) : -1;
@@ -5074,6 +5083,36 @@ esp_err_t ha_client_call_service(const char *domain, const char *service, const 
             }
         }
     }
+
+#if APP_HA_ROUTE_TRACE_LOG
+    if (strcmp(domain, "light") == 0) {
+        char transition_text[24] = "none";
+        char brightness_text[24] = "none";
+        char brightness_pct_text[24] = "none";
+        if (cJSON_IsObject(service_data_obj)) {
+            cJSON *transition = cJSON_GetObjectItemCaseSensitive(service_data_obj, "transition");
+            cJSON *brightness = cJSON_GetObjectItemCaseSensitive(service_data_obj, "brightness");
+            cJSON *brightness_pct = cJSON_GetObjectItemCaseSensitive(service_data_obj, "brightness_pct");
+            if (cJSON_IsNumber(transition)) {
+                snprintf(transition_text, sizeof(transition_text), "%.2f", transition->valuedouble);
+            }
+            if (cJSON_IsNumber(brightness)) {
+                snprintf(brightness_text, sizeof(brightness_text), "%.0f", brightness->valuedouble);
+            }
+            if (cJSON_IsNumber(brightness_pct)) {
+                snprintf(brightness_pct_text, sizeof(brightness_pct_text), "%.0f", brightness_pct->valuedouble);
+            }
+        }
+        ESP_LOGI(TAG_HA_CLIENT,
+            "svc payload %s.%s entity=%s transition=%s brightness=%s brightness_pct=%s",
+            domain,
+            service,
+            (trace_entity_id[0] != '\0') ? trace_entity_id : "?",
+            transition_text,
+            brightness_text,
+            brightness_pct_text);
+    }
+#endif
 
     const char *expected_state =
         ha_client_expected_state_from_service(service, trace_entity_id, current_entity_state);

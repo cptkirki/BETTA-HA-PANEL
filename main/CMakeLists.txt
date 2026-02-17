@@ -75,6 +75,7 @@ set(HOSTED_C6_FW_BIN "")
 set(HOSTED_C6_FW_BIN_DIR
     "${CMAKE_CURRENT_LIST_DIR}/../managed_components/espressif__esp_hosted/examples/host_performs_slave_ota/components/ota_partition/slave_fw_bin")
 set(HOSTED_C6_FW_EMBED_DIR "${CMAKE_CURRENT_BINARY_DIR}/hosted_c6_fw")
+set(HOSTED_C6_FW_BIN_TOOLS "${CMAKE_SOURCE_DIR}/tools/network_adapter_esp32c6.bin")
 file(MAKE_DIRECTORY "${HOSTED_C6_FW_EMBED_DIR}")
 
 set(HOSTED_C6_HOST_VERSION_FILE
@@ -105,37 +106,24 @@ if(NOT HOSTED_C6_EXPECTED_VERSION STREQUAL "unknown")
         "${HOSTED_C6_FW_BIN_DIR}/network_adapter_${HOSTED_C6_EXPECTED_VERSION}.bin")
 endif()
 set(HOSTED_C6_FW_BIN_LOCAL_BUILD "${CMAKE_SOURCE_DIR}/build_c6/network_adapter.bin")
+set(HOSTED_C6_SLAVE_PROJECT_DIR
+    "${CMAKE_CURRENT_LIST_DIR}/../managed_components/espressif__esp_hosted/slave")
+set(HOSTED_C6_SLAVE_BUILD_DIR "${CMAKE_SOURCE_DIR}/build_c6")
+set(HOSTED_C6_SLAVE_BIN "${HOSTED_C6_SLAVE_BUILD_DIR}/network_adapter.bin")
 
-if(EXISTS "${HOSTED_C6_FW_BIN_MANUAL}")
-    set(HOSTED_C6_FW_BIN "${HOSTED_C6_FW_BIN_MANUAL}")
-elseif(DEFINED HOSTED_C6_FW_BIN_EXPECTED AND EXISTS "${HOSTED_C6_FW_BIN_EXPECTED}")
+if(DEFINED HOSTED_C6_FW_BIN_EXPECTED AND EXISTS "${HOSTED_C6_FW_BIN_EXPECTED}")
     set(HOSTED_C6_FW_BIN "${HOSTED_C6_FW_BIN_EXPECTED}")
-elseif(EXISTS "${HOSTED_C6_FW_BIN_LOCAL_BUILD}")
-    set(HOSTED_C6_FW_BIN "${HOSTED_C6_FW_BIN_LOCAL_BUILD}")
-else()
-    file(GLOB HOSTED_C6_FW_BIN_CANDIDATES "${HOSTED_C6_FW_BIN_DIR}/*.bin")
-    # ESP-Hosted 2.11.7 currently has a known managed-component packaging issue.
-    # Keep fallback selection away from that image until upstream fix is available.
-    list(FILTER HOSTED_C6_FW_BIN_CANDIDATES EXCLUDE REGEX "network_adapter_2\\.11\\.7\\.bin$")
-    list(LENGTH HOSTED_C6_FW_BIN_CANDIDATES HOSTED_C6_FW_BIN_COUNT)
-    if(HOSTED_C6_FW_BIN_COUNT GREATER 0)
-        list(SORT HOSTED_C6_FW_BIN_CANDIDATES ORDER DESCENDING)
-        list(GET HOSTED_C6_FW_BIN_CANDIDATES 0 HOSTED_C6_FW_BIN)
-    endif()
 endif()
 
-# If no firmware image is available yet, auto-build the C6 network_adapter once and cache it.
+# Prefer a source-built C6 image from the official esp_hosted slave project when
+# a version-matched cached image is not available yet.
 if(NOT HOSTED_C6_FW_BIN AND CONFIG_ESP_HOSTED_ENABLED)
-    set(HOSTED_C6_SLAVE_PROJECT_DIR
-        "${CMAKE_CURRENT_LIST_DIR}/../managed_components/espressif__esp_hosted/slave")
-    set(HOSTED_C6_SLAVE_BUILD_DIR "${CMAKE_SOURCE_DIR}/build_c6")
-    set(HOSTED_C6_SLAVE_BIN "${HOSTED_C6_SLAVE_BUILD_DIR}/network_adapter.bin")
     if(EXISTS "${HOSTED_C6_SLAVE_PROJECT_DIR}/CMakeLists.txt")
         idf_build_get_property(PYTHON PYTHON)
         set(HOSTED_C6_IDF_PY "$ENV{IDF_PATH}/tools/idf.py")
         if(PYTHON AND EXISTS "${HOSTED_C6_IDF_PY}")
             message(STATUS
-                "Auto-building ESP-Hosted C6 firmware from ${HOSTED_C6_SLAVE_PROJECT_DIR} (target=esp32c6)")
+                "Building ESP-Hosted C6 firmware from source: ${HOSTED_C6_SLAVE_PROJECT_DIR} (target=esp32c6)")
             execute_process(
                 COMMAND "${CMAKE_COMMAND}" -E env
                     "IDF_TARGET=esp32c6"
@@ -160,11 +148,11 @@ if(NOT HOSTED_C6_FW_BIN AND CONFIG_ESP_HOSTED_ENABLED)
                 endif()
                 configure_file("${HOSTED_C6_SLAVE_BIN}" "${HOSTED_C6_FW_BIN_AUTO}" COPYONLY)
                 set(HOSTED_C6_FW_BIN "${HOSTED_C6_FW_BIN_AUTO}")
-                message(STATUS "Auto-built and cached ESP-Hosted C6 firmware image: ${HOSTED_C6_FW_BIN_AUTO}")
+                message(STATUS "Built and cached ESP-Hosted C6 firmware image: ${HOSTED_C6_FW_BIN_AUTO}")
             else()
                 message(WARNING
                     "Automatic C6 firmware build failed (result=${HOSTED_C6_BUILD_RESULT}). "
-                    "Runtime C6 auto-update will be skipped unless a firmware .bin is provided manually.")
+                    "Falling back to prebuilt firmware selection.")
                 if(HOSTED_C6_BUILD_ERROR)
                     message(WARNING "C6 build stderr: ${HOSTED_C6_BUILD_ERROR}")
                 endif()
@@ -172,6 +160,40 @@ if(NOT HOSTED_C6_FW_BIN AND CONFIG_ESP_HOSTED_ENABLED)
         else()
             message(WARNING
                 "Cannot auto-build C6 firmware: idf.py or python path is unavailable in CMake context.")
+        endif()
+    else()
+        message(WARNING
+            "Cannot auto-build C6 firmware: missing slave project at ${HOSTED_C6_SLAVE_PROJECT_DIR}")
+    endif()
+endif()
+
+if(NOT HOSTED_C6_FW_BIN)
+    if(DEFINED HOSTED_C6_FW_BIN_EXPECTED AND EXISTS "${HOSTED_C6_FW_BIN_EXPECTED}")
+        set(HOSTED_C6_FW_BIN "${HOSTED_C6_FW_BIN_EXPECTED}")
+    elseif(NOT HOSTED_C6_EXPECTED_VERSION STREQUAL "unknown")
+        message(WARNING
+            "No version-matched C6 firmware image available for host version ${HOSTED_C6_EXPECTED_VERSION}. "
+            "Refusing unversioned fallbacks to avoid embedding incompatible slave firmware.")
+    elseif(EXISTS "${HOSTED_C6_FW_BIN_TOOLS}")
+        set(HOSTED_C6_FW_BIN "${HOSTED_C6_FW_BIN_TOOLS}")
+        message(WARNING
+            "Using tools/network_adapter_esp32c6.bin as fallback because host version is unknown.")
+    elseif(EXISTS "${HOSTED_C6_FW_BIN_MANUAL}")
+        set(HOSTED_C6_FW_BIN "${HOSTED_C6_FW_BIN_MANUAL}")
+        message(WARNING
+            "Using managed-components generic network_adapter.bin fallback because host version is unknown.")
+    elseif(EXISTS "${HOSTED_C6_FW_BIN_LOCAL_BUILD}")
+        set(HOSTED_C6_FW_BIN "${HOSTED_C6_FW_BIN_LOCAL_BUILD}")
+        message(WARNING
+            "Using build_c6/network_adapter.bin fallback because host version is unknown.")
+    else()
+        file(GLOB HOSTED_C6_FW_BIN_CANDIDATES "${HOSTED_C6_FW_BIN_DIR}/*.bin")
+        list(LENGTH HOSTED_C6_FW_BIN_CANDIDATES HOSTED_C6_FW_BIN_COUNT)
+        if(HOSTED_C6_FW_BIN_COUNT GREATER 0)
+            list(SORT HOSTED_C6_FW_BIN_CANDIDATES ORDER DESCENDING)
+            list(GET HOSTED_C6_FW_BIN_CANDIDATES 0 HOSTED_C6_FW_BIN)
+            message(WARNING
+                "Using best-effort C6 firmware fallback because host version is unknown: ${HOSTED_C6_FW_BIN}")
         endif()
     endif()
 endif()

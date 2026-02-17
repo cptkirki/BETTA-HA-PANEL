@@ -40,4 +40,5 @@ bool wifi_mgr_is_setup_ap_active(void);
 const char *wifi_mgr_get_setup_ap_ssid(void);
 esp_err_t wifi_mgr_get_sta_ip(char *out, size_t out_len);
 esp_err_t wifi_mgr_get_ap_ip(char *out, size_t out_len);
+esp_err_t wifi_mgr_get_sta_rssi(int8_t *out_rssi_dbm);
 esp_err_t wifi_mgr_scan(wifi_mgr_scan_result_t *results, size_t max_results, size_t *out_count);

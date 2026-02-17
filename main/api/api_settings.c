@@ -161,6 +161,12 @@ esp_err_t api_settings_get_handler(httpd_req_t *req)
     cJSON_AddBoolToObject(wifi, "connected", wifi_mgr_is_connected());
     cJSON_AddBoolToObject(wifi, "setup_ap_active", wifi_mgr_is_setup_ap_active());
     cJSON_AddStringToObject(wifi, "setup_ap_ssid", wifi_mgr_get_setup_ap_ssid());
+    int8_t wifi_rssi_dbm = 0;
+    if (wifi_mgr_get_sta_rssi(&wifi_rssi_dbm) == ESP_OK) {
+        cJSON_AddNumberToObject(wifi, "rssi_dbm", (double)wifi_rssi_dbm);
+    } else {
+        cJSON_AddNullToObject(wifi, "rssi_dbm");
+    }
     cJSON_AddBoolToObject(wifi, "scan_supported", true);
     cJSON_AddItemToObject(root, "wifi", wifi);
 

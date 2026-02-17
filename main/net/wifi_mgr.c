@@ -568,20 +568,30 @@ static void wifi_mgr_maybe_auto_update_c6_fw(const esp_hosted_coprocessor_fwver_
         return;
     }
 
+    const bool force_bundled_update = (APP_HOSTED_FORCE_BUNDLED_C6_UPDATE != 0);
+    const bool allow_version_mismatch = (APP_HOSTED_ALLOW_BUNDLED_C6_VERSION_MISMATCH != 0);
     uint32_t host_version = hosted_version_pack(
         ESP_HOSTED_VERSION_MAJOR_1, ESP_HOSTED_VERSION_MINOR_1, ESP_HOSTED_VERSION_PATCH_1);
     uint32_t running_version = hosted_version_pack(running_fw->major1, running_fw->minor1, running_fw->patch1);
 
-    if (running_version == host_version) {
+    if (running_version == host_version && !force_bundled_update) {
         return;
     }
 
-    ESP_LOGW(TAG_WIFI,
-        "C6 FW mismatch: running %u.%u.%u, host expects " ESP_HOSTED_VERSION_PRINTF_FMT,
-        (unsigned int)running_fw->major1,
-        (unsigned int)running_fw->minor1,
-        (unsigned int)running_fw->patch1,
-        ESP_HOSTED_VERSION_PRINTF_ARGS(host_version));
+    if (running_version != host_version) {
+        ESP_LOGW(TAG_WIFI,
+            "C6 FW mismatch: running %u.%u.%u, host expects " ESP_HOSTED_VERSION_PRINTF_FMT,
+            (unsigned int)running_fw->major1,
+            (unsigned int)running_fw->minor1,
+            (unsigned int)running_fw->patch1,
+            ESP_HOSTED_VERSION_PRINTF_ARGS(host_version));
+    } else {
+        ESP_LOGW(TAG_WIFI,
+            "Forced C6 OTA enabled: running FW matches host (%u.%u.%u), but bundled image will still be evaluated",
+            (unsigned int)running_fw->major1,
+            (unsigned int)running_fw->minor1,
+            (unsigned int)running_fw->patch1);
+    }
 
 #if !APP_HAVE_HOSTED_C6_FW_IMAGE
     ESP_LOGW(TAG_WIFI, "No embedded C6 firmware image available; skipping automatic C6 update");
@@ -607,19 +617,32 @@ static void wifi_mgr_maybe_auto_update_c6_fw(const esp_hosted_coprocessor_fwver_
             (unsigned int)bundled_major, (unsigned int)bundled_minor, (unsigned int)bundled_patch, (unsigned int)fw_len);
 
         if (bundled_version != host_version) {
+            if (!allow_version_mismatch) {
+                ESP_LOGW(TAG_WIFI,
+                    "Bundled C6 version (%u.%u.%u) does not match host stack version ("
+                    ESP_HOSTED_VERSION_PRINTF_FMT "). Skipping auto update for safety.",
+                    (unsigned int)bundled_major,
+                    (unsigned int)bundled_minor,
+                    (unsigned int)bundled_patch,
+                    ESP_HOSTED_VERSION_PRINTF_ARGS(host_version));
+                return;
+            }
             ESP_LOGW(TAG_WIFI,
-                "Bundled C6 version (%u.%u.%u) does not match host stack version ("
-                ESP_HOSTED_VERSION_PRINTF_FMT "). Skipping auto update for safety.",
+                "Proceeding despite bundled/host version mismatch (bundled=%u.%u.%u host="
+                ESP_HOSTED_VERSION_PRINTF_FMT ") due to APP_HOSTED_ALLOW_BUNDLED_C6_VERSION_MISMATCH=1",
                 (unsigned int)bundled_major,
                 (unsigned int)bundled_minor,
                 (unsigned int)bundled_patch,
                 ESP_HOSTED_VERSION_PRINTF_ARGS(host_version));
-            return;
         }
 
         if (bundled_version == running_version) {
-            ESP_LOGW(TAG_WIFI, "Running C6 version already equals bundled image; skipping auto update");
-            return;
+            if (!force_bundled_update) {
+                ESP_LOGW(TAG_WIFI, "Running C6 version already equals bundled image; skipping auto update");
+                return;
+            }
+            ESP_LOGW(TAG_WIFI,
+                "Forced C6 OTA enabled: bundled and running versions are equal, reflashing anyway");
         }
     } else {
         ESP_LOGW(TAG_WIFI,
@@ -1183,6 +1206,26 @@ esp_err_t wifi_mgr_get_ap_ip(char *out, size_t out_len)
     return ESP_ERR_NOT_SUPPORTED;
 #else
     return wifi_mgr_get_ip_for_netif(s_wifi_ap_netif, out, out_len);
+#endif
+}
+
+esp_err_t wifi_mgr_get_sta_rssi(int8_t *out_rssi_dbm)
+{
+#if !SOC_WIFI_SUPPORTED && !CONFIG_ESP_HOSTED_ENABLED
+    (void)out_rssi_dbm;
+    return ESP_ERR_NOT_SUPPORTED;
+#else
+    if (out_rssi_dbm == NULL) {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    wifi_ap_record_t ap_info = {0};
+    esp_err_t err = esp_wifi_sta_get_ap_info(&ap_info);
+    if (err != ESP_OK) {
+        return err;
+    }
+    *out_rssi_dbm = ap_info.rssi;
+    return ESP_OK;
 #endif
 }
 

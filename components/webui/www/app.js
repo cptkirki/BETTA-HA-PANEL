@@ -83,6 +83,7 @@ const WEB_I18N_BUILTIN = {
     "settings.info.connected": "Connected",
     "settings.info.password_stored": "Password stored",
     "settings.info.country": "Country",
+    "settings.info.rssi": "RSSI",
     "settings.info.token_stored": "Token stored",
     "settings.info.rest_fallback": "REST fallback",
     "common.yes": "yes",
@@ -177,6 +178,7 @@ const WEB_I18N_BUILTIN = {
     "settings.info.connected": "Verbunden",
     "settings.info.password_stored": "Passwort gespeichert",
     "settings.info.country": "Land",
+    "settings.info.rssi": "RSSI",
     "settings.info.token_stored": "Token gespeichert",
     "settings.info.rest_fallback": "REST Fallback",
     "common.yes": "ja",
@@ -271,6 +273,7 @@ const WEB_I18N_BUILTIN = {
     "settings.info.connected": "Conectado",
     "settings.info.password_stored": "Contrasena guardada",
     "settings.info.country": "Pais",
+    "settings.info.rssi": "RSSI",
     "settings.info.token_stored": "Token guardado",
     "settings.info.rest_fallback": "Fallback REST",
     "common.yes": "si",
@@ -854,7 +857,7 @@ function downloadLanguageJson() {
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
-  a.download = `betaa-i18n-${lang}.json`;
+  a.download = `betta-i18n-${lang}.json`;
   a.click();
   URL.revokeObjectURL(url);
 }
@@ -906,7 +909,9 @@ function setProvisioningVisible(visible) {
 
 function provisioningStageForSettings(settings) {
   const wifiConfigured = Boolean(settings?.wifi?.configured);
+  const wifiSetupApActive = Boolean(settings?.wifi?.setup_ap_active);
   const haConfigured = Boolean(settings?.ha?.configured);
+  if (wifiSetupApActive) return "wifi";
   if (!wifiConfigured) return "wifi";
   if (!haConfigured) return "ha";
   return null;
@@ -1042,6 +1047,7 @@ function renderSettings() {
     `${t("settings.info.connected")}: ${wifi.connected ? t("common.yes") : t("common.no")}`,
     `${t("settings.info.password_stored")}: ${wifi.password_set ? t("common.yes") : t("common.no")}`,
     `${t("settings.info.country")}: ${normalizeCountryCode(wifi.country_code) || "US"}`,
+    `${t("settings.info.rssi")}: ${Number.isFinite(Number(wifi.rssi_dbm)) ? `${Math.round(Number(wifi.rssi_dbm))} dBm` : "n/a"}`,
   ].join(" | ");
 
   el.settingsHaInfo.textContent = [
@@ -2257,7 +2263,7 @@ function exportLayout() {
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
-  a.download = "betaa-layout.json";
+  a.download = "betta-layout.json";
   a.click();
   URL.revokeObjectURL(url);
 }

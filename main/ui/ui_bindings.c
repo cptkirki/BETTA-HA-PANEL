@@ -40,6 +40,10 @@ static void ui_bindings_publish_state_changed_event(const char *entity_id)
     strlcpy(event.data.ha_state_changed.entity_id, entity_id, sizeof(event.data.ha_state_changed.entity_id));
     if (!app_events_publish(&event, pdMS_TO_TICKS(5))) {
         ESP_LOGW(TAG, "failed to enqueue optimistic state event for %s", entity_id);
+    } else {
+#if APP_HA_ROUTE_TRACE_LOG
+        ESP_LOGI(TAG, "route panel_touch->panel entity=%s source=optimistic", entity_id);
+#endif
     }
 }
 
@@ -178,7 +182,11 @@ esp_err_t ui_bindings_toggle_entity(const char *entity_id)
     }
     char payload[192] = {0};
     if (strcmp(domain, HA_DOMAIN_LIGHT) == 0) {
+#if APP_HA_LIGHT_USE_TRANSITION_ZERO
         snprintf(payload, sizeof(payload), "{\"entity_id\":\"%s\",\"transition\":0}", entity_id);
+#else
+        snprintf(payload, sizeof(payload), "{\"entity_id\":\"%s\"}", entity_id);
+#endif
     } else {
         snprintf(payload, sizeof(payload), "{\"entity_id\":\"%s\"}", entity_id);
     }
@@ -204,25 +212,59 @@ esp_err_t ui_bindings_set_entity_power(const char *entity_id, bool on)
     if (entity_id == NULL || entity_id[0] == '\0') {
         return ESP_ERR_INVALID_ARG;
     }
-    if (!ui_bindings_allow_power_command_now(entity_id, true, on)) {
-        return ESP_OK;
-    }
 
     char domain[32] = {0};
     if (!split_entity_id(entity_id, domain, sizeof(domain))) {
         return ESP_ERR_INVALID_ARG;
     }
+    bool is_light = (strcmp(domain, HA_DOMAIN_LIGHT) == 0);
+
+#if APP_HA_LIGHT_POWER_USE_TOGGLE
+    bool current_known = false;
+    bool current_on = false;
+    if (is_light) {
+        ha_state_t current = {0};
+        if (ha_model_get_state(entity_id, &current)) {
+            if (strcmp(current.state, "on") == 0) {
+                current_known = true;
+                current_on = true;
+            } else if (strcmp(current.state, "off") == 0) {
+                current_known = true;
+                current_on = false;
+            }
+        }
+    }
+    if (current_known && (current_on == on)) {
+        return ESP_OK;
+    }
+#endif
+
+    if (!ui_bindings_allow_power_command_now(entity_id, true, on)) {
+        return ESP_OK;
+    }
 
     const char *service = on ? HA_SERVICE_TURN_ON : HA_SERVICE_TURN_OFF;
+#if APP_HA_LIGHT_POWER_USE_TOGGLE
+    if (is_light && current_known) {
+        service = HA_SERVICE_TOGGLE;
+    }
+#endif
+
     char payload[192] = {0};
-    if (strcmp(domain, HA_DOMAIN_LIGHT) == 0) {
+    if (is_light) {
+#if APP_HA_LIGHT_USE_TRANSITION_ZERO
         snprintf(payload, sizeof(payload), "{\"entity_id\":\"%s\",\"transition\":0}", entity_id);
+#else
+        snprintf(payload, sizeof(payload), "{\"entity_id\":\"%s\"}", entity_id);
+#endif
     } else {
         snprintf(payload, sizeof(payload), "{\"entity_id\":\"%s\"}", entity_id);
     }
     esp_err_t err = ha_client_call_service(domain, service, payload);
     if (err == ESP_OK) {
         ui_bindings_apply_optimistic_power_state(entity_id, on);
+    } else {
+        ESP_LOGW(TAG, "set power failed entity=%s service=%s err=%s", entity_id, service, esp_err_to_name(err));
     }
     return err;
 }
@@ -250,8 +292,12 @@ esp_err_t ui_bindings_set_slider_value(const char *entity_id, int value)
     if (strcmp(domain, HA_DOMAIN_LIGHT) == 0) {
         int brightness = (value * 255) / 100;
         service = HA_SERVICE_TURN_ON;
+#if APP_HA_LIGHT_USE_TRANSITION_ZERO
         snprintf(payload, sizeof(payload), "{\"entity_id\":\"%s\",\"brightness\":%d,\"transition\":0}", entity_id,
             brightness);
+#else
+        snprintf(payload, sizeof(payload), "{\"entity_id\":\"%s\",\"brightness\":%d}", entity_id, brightness);
+#endif
     } else if (strcmp(domain, HA_DOMAIN_MEDIA_PLAYER) == 0) {
         service = "volume_set";
         snprintf(payload, sizeof(payload), "{\"entity_id\":\"%s\",\"volume_level\":%.2f}", entity_id, (float)value / 100.0f);

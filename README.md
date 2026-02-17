@@ -6,5 +6,5 @@ BETTA HA Panel macht aus der Smart86 Box ein eigenstaendiges 720x720 Home-Assist
 
 - Live-Anbindung an Home Assistant per WebSocket (optional mit REST-Fallback)
 - Lokaler Web-Editor unter `http://<panel-ip>` fuer Layout, Widgets und Einstellungen
-- Integrierter Provisioning-Flow fuer Wi-Fi und Home Assistant (inkl. Setup-AP `BETAA-Setup`)
+- Integrierter Provisioning-Flow fuer Wi-Fi und Home Assistant (inkl. Setup-AP `BETTA-Setup`)
 - Mehrseitiges Widget-Dashboard, z. B. Sensor, Button, Slider, Graph, Light-, Heating- und Weather-Tiles

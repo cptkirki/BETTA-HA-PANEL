@@ -550,21 +550,23 @@ static void button_run_primary_action(w_button_ctx_t *ctx)
 
     if (button_mode_uses_switch(ctx->mode)) {
         bool next = !ctx->is_on;
-        button_apply_visual(ctx->card, ctx, next, false, next ? "ON" : "OFF");
-        ui_bindings_toggle_entity(ctx->entity_id);
+        if (ui_bindings_toggle_entity(ctx->entity_id) == ESP_OK) {
+            button_apply_visual(ctx->card, ctx, next, false, next ? "ON" : "OFF");
+        }
         return;
     }
 
     if (ctx->mode == W_BUTTON_MODE_PLAY_PAUSE) {
         bool next = !ctx->is_on;
-        button_apply_visual(ctx->card, ctx, next, false, next ? "playing" : "paused");
-        ui_bindings_media_player_action(ctx->entity_id, UI_BINDINGS_MEDIA_ACTION_PLAY_PAUSE);
+        if (ui_bindings_media_player_action(ctx->entity_id, UI_BINDINGS_MEDIA_ACTION_PLAY_PAUSE) == ESP_OK) {
+            button_apply_visual(ctx->card, ctx, next, false, next ? "playing" : "paused");
+        }
     } else if (ctx->mode == W_BUTTON_MODE_STOP) {
-        ui_bindings_media_player_action(ctx->entity_id, UI_BINDINGS_MEDIA_ACTION_STOP);
+        (void)ui_bindings_media_player_action(ctx->entity_id, UI_BINDINGS_MEDIA_ACTION_STOP);
     } else if (ctx->mode == W_BUTTON_MODE_NEXT) {
-        ui_bindings_media_player_action(ctx->entity_id, UI_BINDINGS_MEDIA_ACTION_NEXT);
+        (void)ui_bindings_media_player_action(ctx->entity_id, UI_BINDINGS_MEDIA_ACTION_NEXT);
     } else if (ctx->mode == W_BUTTON_MODE_PREVIOUS) {
-        ui_bindings_media_player_action(ctx->entity_id, UI_BINDINGS_MEDIA_ACTION_PREVIOUS);
+        (void)ui_bindings_media_player_action(ctx->entity_id, UI_BINDINGS_MEDIA_ACTION_PREVIOUS);
     }
 }
 
@@ -601,8 +603,9 @@ static void w_button_switch_event_cb(lv_event_t *event)
     }
 
     bool checked = lv_obj_has_state(sw, LV_STATE_CHECKED);
-    button_apply_visual(ctx->card, ctx, checked, false, checked ? "ON" : "OFF");
-    ui_bindings_toggle_entity(ctx->entity_id);
+    if (ui_bindings_toggle_entity(ctx->entity_id) == ESP_OK) {
+        button_apply_visual(ctx->card, ctx, checked, false, checked ? "ON" : "OFF");
+    }
 }
 
 esp_err_t w_button_create(const ui_widget_def_t *def, lv_obj_t *parent, ui_widget_instance_t *out_instance)

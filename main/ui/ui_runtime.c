@@ -448,6 +448,9 @@ static void ui_runtime_handle_event(const app_event_t *event)
     switch (event->type) {
     case EV_HA_STATE_CHANGED:
         ui_runtime_apply_entity_state(event->data.ha_state_changed.entity_id);
+#if APP_HA_ROUTE_TRACE_LOG
+        ESP_LOGI(TAG_UI, "route panel->ui entity=%s", event->data.ha_state_changed.entity_id);
+#endif
         break;
     case EV_HA_CONNECTED:
         ui_runtime_refresh_topbar();

@@ -274,14 +274,15 @@ static void w_light_tile_card_event_cb(lv_event_t *event)
         if (next_brightness < 0) {
             next_brightness = 0;
         }
+        next_brightness = clamp_percent(next_brightness);
 
-        ctx->is_on = next_is_on;
-        ctx->brightness = clamp_percent(next_brightness);
-        ctx->unavailable = false;
-        light_apply_visual(card, ctx->is_on, ctx->brightness, ctx->is_on ? "ON" : "OFF");
-
-        esp_err_t err = ui_bindings_set_entity_power(ctx->entity_id, ctx->is_on);
-        if (err != ESP_OK) {
+        esp_err_t err = ui_bindings_set_entity_power(ctx->entity_id, next_is_on);
+        if (err == ESP_OK) {
+            ctx->is_on = next_is_on;
+            ctx->brightness = next_brightness;
+            ctx->unavailable = false;
+            light_apply_visual(card, ctx->is_on, ctx->brightness, ctx->is_on ? "ON" : "OFF");
+        } else {
             ctx->is_on = prev_is_on;
             ctx->brightness = prev_brightness;
             ctx->unavailable = prev_unavailable;
@@ -319,15 +320,18 @@ static void w_light_tile_slider_event_cb(lv_event_t *event)
         int prev_brightness = ctx->brightness;
         bool prev_unavailable = ctx->unavailable;
 
-        ctx->brightness = clamp_percent(value);
-        ctx->is_on = (ctx->brightness > 0);
-        ctx->unavailable = false;
-        if (card != NULL) {
-            light_apply_visual(card, ctx->is_on, ctx->brightness, ctx->is_on ? "ON" : "OFF");
-        }
+        int next_brightness = clamp_percent(value);
+        bool next_is_on = (next_brightness > 0);
 
-        esp_err_t err = ui_bindings_set_slider_value(ctx->entity_id, value);
-        if (err != ESP_OK) {
+        esp_err_t err = ui_bindings_set_slider_value(ctx->entity_id, next_brightness);
+        if (err == ESP_OK) {
+            ctx->brightness = next_brightness;
+            ctx->is_on = next_is_on;
+            ctx->unavailable = false;
+            if (card != NULL) {
+                light_apply_visual(card, ctx->is_on, ctx->brightness, ctx->is_on ? "ON" : "OFF");
+            }
+        } else {
             ctx->is_on = prev_is_on;
             ctx->brightness = prev_brightness;
             ctx->unavailable = prev_unavailable;

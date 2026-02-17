@@ -22,7 +22,7 @@ static const char *s_fallback_index_html =
     "<!doctype html><html><head><meta charset=\"utf-8\"><title>BETTA Editor</title>"
     "<meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"></head>"
     "<body><h1>BETTA Editor</h1><p>WebUI asset missing, check EMBED_TXTFILES.</p></body></html>";
-static const char *s_fallback_app_js = "console.log('BETAA WebUI fallback active');";
+static const char *s_fallback_app_js = "console.log('BETTA WebUI fallback active');";
 static const char *s_fallback_styles_css = "body{font-family:sans-serif;padding:20px}";
 
 static httpd_handle_t s_server = NULL;

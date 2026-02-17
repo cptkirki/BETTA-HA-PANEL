@@ -1,6 +1,6 @@
 #pragma once
 
-#define APP_NAME "betaa-ha-panel"
+#define APP_NAME "betta-ha-panel"
 
 #define APP_SCREEN_WIDTH 720
 #define APP_SCREEN_HEIGHT 720
@@ -37,7 +37,7 @@
 #define APP_I18N_DIR "/littlefs/i18n"
 #define APP_I18N_MAX_JSON_LEN 32768
 
-#define APP_SETUP_AP_SSID_PREFIX "BETAA-Setup"
+#define APP_SETUP_AP_SSID_PREFIX "BETTA-Setup"
 #define APP_SETUP_AP_PASSWORD ""
 #define APP_SETUP_AP_CHANNEL 1
 #define APP_SETUP_AP_MAX_CONNECTIONS 4
@@ -63,6 +63,18 @@
 #define APP_HA_QUEUE_LENGTH 96
 #define APP_HA_TASK_STACK 10240
 #define APP_HA_TASK_PRIO 8
+
+/* Keep pre-language behavior for light commands (explicit no-fade). */
+#define APP_HA_LIGHT_USE_TRANSITION_ZERO 1
+
+/* Optional A/B: use light.toggle for panel power actions (with desired-state guard). */
+#define APP_HA_LIGHT_POWER_USE_TOGGLE 0
+
+/* Keep pre-language WS subscription path enabled. */
+#define APP_HA_USE_WS_ENTITIES_SUBSCRIPTION 1
+
+/* Route tracing for state flow: WS -> panel model -> UI (verbose, keep off by default). */
+#define APP_HA_ROUTE_TRACE_LOG 0
 
 #define APP_UI_TASK_STACK 24576
 #define APP_UI_TASK_PRIO 4
@@ -123,6 +135,12 @@
 #else
 #define APP_HOSTED_AUTO_UPDATE_C6_FW 1
 #endif
+
+/* Expert override: force a one-time C6 OTA to bundled image even when running FW matches host version. */
+#define APP_HOSTED_FORCE_BUNDLED_C6_UPDATE 0
+
+/* Expert override: allow bundled C6 FW version different from host ESP-Hosted stack version. */
+#define APP_HOSTED_ALLOW_BUNDLED_C6_VERSION_MISMATCH 0
 
 #ifdef CONFIG_APP_HA_WS_URL
 #define APP_HA_WS_URL CONFIG_APP_HA_WS_URL

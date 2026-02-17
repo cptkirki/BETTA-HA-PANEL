@@ -504,17 +504,27 @@ static void w_slider_event_cb(lv_event_t *event)
         ctx->is_on = ctx->value > 0;
         slider_apply_visual(ctx);
     } else if (code == LV_EVENT_RELEASED) {
-        ctx->value = clamp_percent(lv_slider_get_value(slider));
+        int prev_value = ctx->value;
+        bool prev_is_on = ctx->is_on;
+        bool prev_unavailable = ctx->unavailable;
+        int next_value = clamp_percent(lv_slider_get_value(slider));
+        bool next_is_on = next_value > 0;
         ctx->dragging = false;
-        ctx->unavailable = false;
-        ctx->is_on = ctx->value > 0;
-        slider_apply_visual(ctx);
-        if (ctx->value != ctx->last_sent_value) {
-            esp_err_t err = ui_bindings_set_slider_value(ctx->entity_id, ctx->value);
-            if (err == ESP_OK) {
-                ctx->last_sent_value = ctx->value;
+        if (next_value != ctx->last_sent_value) {
+            esp_err_t err = ui_bindings_set_slider_value(ctx->entity_id, next_value);
+            if (err != ESP_OK) {
+                ctx->value = prev_value;
+                ctx->is_on = prev_is_on;
+                ctx->unavailable = prev_unavailable;
+                slider_apply_visual(ctx);
+                return;
             }
+            ctx->last_sent_value = next_value;
         }
+        ctx->value = next_value;
+        ctx->is_on = next_is_on;
+        ctx->unavailable = false;
+        slider_apply_visual(ctx);
     } else if (code == LV_EVENT_PRESS_LOST) {
         ctx->dragging = false;
         slider_apply_visual(ctx);
