@@ -1,4 +1,4 @@
 cmake_minimum_required(VERSION 3.16)
 
 include($ENV{IDF_PATH}/tools/cmake/project.cmake)
-project(smart86-ha-panel)
+project(betaa-ha-panel)

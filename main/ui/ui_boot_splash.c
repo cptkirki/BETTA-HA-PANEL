@@ -12,6 +12,7 @@
 
 #include "app_config.h"
 #include "drivers/display_init.h"
+#include "ui/ui_i18n.h"
 #include "util/log_tags.h"
 
 #if defined(__has_include)
@@ -266,7 +267,7 @@ esp_err_t ui_boot_splash_show(void)
     lv_obj_align_to(s_splash.status, s_splash.title, LV_ALIGN_OUT_BOTTOM_MID, s_status_x_offset, 14);
 
     s_splash.status_line_count = 0;
-    splash_add_status_line("Initializing system");
+    splash_add_status_line(ui_i18n_get("boot.initializing_system", "Initializing system"));
     s_splash.progress_value = 0;
     s_splash.timer = lv_timer_create(splash_timer_cb, 280, NULL);
     s_splash.shown_at_ms = splash_now_ms();

@@ -6,6 +6,7 @@
 #include <time.h>
 
 #include "app_config.h"
+#include "ui/ui_i18n.h"
 #include "ui/theme/theme_default.h"
 
 typedef struct {
@@ -283,7 +284,9 @@ static void ui_pages_create_topbar(lv_obj_t *screen)
     lv_obj_set_width(s_api_icon, 86);
     lv_obj_align(s_api_icon, LV_ALIGN_RIGHT_MID, -114, 0);
     ui_pages_style_topbar_chip(s_api_icon);
-    lv_label_set_text(s_api_icon, "HA " LV_SYMBOL_CLOSE);
+    char api_text[32] = {0};
+    snprintf(api_text, sizeof(api_text), "%s %s", ui_i18n_get("topbar.ha", "HA"), LV_SYMBOL_CLOSE);
+    lv_label_set_text(s_api_icon, api_text);
 
     s_wifi_icon = lv_label_create(s_topbar);
     lv_obj_set_width(s_wifi_icon, 96);
@@ -503,13 +506,14 @@ void ui_pages_set_topbar_status(
     lv_color_t off = lv_color_hex(APP_UI_COLOR_TOPBAR_STATUS_OFF);
 
     if (s_wifi_icon != NULL) {
-        const char *wifi_text = LV_SYMBOL_CLOSE;
+        char wifi_text[32] = {0};
+        snprintf(wifi_text, sizeof(wifi_text), "%s", LV_SYMBOL_CLOSE);
         lv_color_t wifi_color = off;
         if (wifi_setup_ap_active) {
-            wifi_text = "AP " LV_SYMBOL_WIFI;
+            snprintf(wifi_text, sizeof(wifi_text), "%s %s", ui_i18n_get("topbar.ap", "AP"), LV_SYMBOL_WIFI);
             wifi_color = on;
         } else if (wifi_connected) {
-            wifi_text = LV_SYMBOL_WIFI;
+            snprintf(wifi_text, sizeof(wifi_text), "%s", LV_SYMBOL_WIFI);
             wifi_color = on;
         }
         lv_label_set_text(s_wifi_icon, wifi_text);
@@ -517,13 +521,14 @@ void ui_pages_set_topbar_status(
     }
 
     if (s_api_icon != NULL) {
-        const char *api_text = "HA " LV_SYMBOL_CLOSE;
+        char api_text[32] = {0};
+        snprintf(api_text, sizeof(api_text), "%s %s", ui_i18n_get("topbar.ha", "HA"), LV_SYMBOL_CLOSE);
         lv_color_t api_color = off;
         if (api_connected) {
             if (api_initial_sync_done) {
-                api_text = "HA " LV_SYMBOL_OK;
+                snprintf(api_text, sizeof(api_text), "%s %s", ui_i18n_get("topbar.ha", "HA"), LV_SYMBOL_OK);
             } else {
-                api_text = "HA " LV_SYMBOL_REFRESH;
+                snprintf(api_text, sizeof(api_text), "%s %s", ui_i18n_get("topbar.ha", "HA"), LV_SYMBOL_REFRESH);
             }
             api_color = on;
         }

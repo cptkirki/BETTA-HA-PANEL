@@ -12,6 +12,7 @@
 #include "esp_log.h"
 
 #include "ui/fonts/mdi_font_registry.h"
+#include "ui/ui_i18n.h"
 #include "ui/theme/theme_default.h"
 
 #ifndef APP_UI_WEATHER_ICON_DEBUG
@@ -2036,7 +2037,7 @@ static void weather_render_3day(lv_obj_t *card, w_weather_tile_ctx_t *ctx, const
         lv_label_set_text(ctx->condition_label, "--");
 
         lv_label_set_text(ctx->temp_label, "--");
-        lv_label_set_text(ctx->meta_label, "Unavailable");
+        lv_label_set_text(ctx->meta_label, ui_i18n_get("weather.unavailable", "Unavailable"));
         for (int i = 0; i < WEATHER_3DAY_ROWS; i++) {
             weather_set_3day_row_values(&ctx->rows[i], NULL, "C", 0.0f, 1.0f);
         }
@@ -2148,7 +2149,7 @@ static void weather_render(lv_obj_t *card, w_weather_tile_ctx_t *ctx, const weat
         lv_obj_align(ctx->temp_label, LV_ALIGN_TOP_MID, 0, 72);
         lv_obj_align(ctx->meta_label, LV_ALIGN_TOP_MID, 0, 124);
 #endif
-        lv_label_set_text(ctx->condition_label, "Unavailable");
+        lv_label_set_text(ctx->condition_label, ui_i18n_get("weather.unavailable", "Unavailable"));
         lv_label_set_text(ctx->temp_label, "--");
         lv_label_set_text(ctx->meta_label, "");
         weather_hide_lottie(ctx);
@@ -2234,7 +2235,7 @@ static void weather_render(lv_obj_t *card, w_weather_tile_ctx_t *ctx, const weat
         if (visual_icon_mode) {
             snprintf(meta_text, sizeof(meta_text), "%.36s | %d%%", display_condition, values->humidity);
         } else {
-            snprintf(meta_text, sizeof(meta_text), "Humidity %d%%", values->humidity);
+            snprintf(meta_text, sizeof(meta_text), ui_i18n_get("weather.humidity_format", "Humidity %d%%"), values->humidity);
         }
         lv_label_set_text(ctx->meta_label, meta_text);
     } else {

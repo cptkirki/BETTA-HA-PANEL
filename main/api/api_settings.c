@@ -12,6 +12,7 @@
 #include "bsp/display.h"
 #include "ha/ha_client.h"
 #include "net/wifi_mgr.h"
+#include "settings/i18n_store.h"
 #include "settings/runtime_settings.h"
 
 static esp_timer_handle_t s_restart_timer = NULL;
@@ -76,6 +77,24 @@ static bool normalize_country_code(char *country_code, size_t country_code_len)
     return true;
 }
 
+static bool normalize_ui_language(char *language, size_t language_len)
+{
+    if (language == NULL || language_len == 0) {
+        return false;
+    }
+    if (language[0] == '\0') {
+        strlcpy(language, APP_UI_DEFAULT_LANGUAGE, language_len);
+        return true;
+    }
+
+    char normalized[APP_UI_LANGUAGE_MAX_LEN] = {0};
+    if (!i18n_store_normalize_language_code(language, normalized, sizeof(normalized))) {
+        return false;
+    }
+    strlcpy(language, normalized, language_len);
+    return true;
+}
+
 static void restart_timer_cb(void *arg)
 {
     (void)arg;
@@ -124,11 +143,13 @@ esp_err_t api_settings_get_handler(httpd_req_t *req)
     cJSON *wifi = cJSON_CreateObject();
     cJSON *ha = cJSON_CreateObject();
     cJSON *time_cfg = cJSON_CreateObject();
-    if (root == NULL || wifi == NULL || ha == NULL || time_cfg == NULL) {
+    cJSON *ui = cJSON_CreateObject();
+    if (root == NULL || wifi == NULL || ha == NULL || time_cfg == NULL || ui == NULL) {
         cJSON_Delete(root);
         cJSON_Delete(wifi);
         cJSON_Delete(ha);
         cJSON_Delete(time_cfg);
+        cJSON_Delete(ui);
         free(settings);
         return httpd_resp_send_500(req);
     }
@@ -153,6 +174,9 @@ esp_err_t api_settings_get_handler(httpd_req_t *req)
     cJSON_AddStringToObject(time_cfg, "ntp_server", settings->ntp_server);
     cJSON_AddStringToObject(time_cfg, "timezone", settings->time_tz);
     cJSON_AddItemToObject(root, "time", time_cfg);
+
+    cJSON_AddStringToObject(ui, "language", settings->ui_language);
+    cJSON_AddItemToObject(root, "ui", ui);
 
     cJSON_AddBoolToObject(root, "ok", true);
 
@@ -263,6 +287,7 @@ esp_err_t api_settings_put_handler(httpd_req_t *req)
     cJSON *wifi = cJSON_GetObjectItemCaseSensitive(root, "wifi");
     cJSON *ha = cJSON_GetObjectItemCaseSensitive(root, "ha");
     cJSON *time_cfg = cJSON_GetObjectItemCaseSensitive(root, "time");
+    cJSON *ui = cJSON_GetObjectItemCaseSensitive(root, "ui");
     if (wifi != NULL && !cJSON_IsObject(wifi)) {
         cJSON_Delete(root);
         free(settings);
@@ -277,6 +302,11 @@ esp_err_t api_settings_put_handler(httpd_req_t *req)
         cJSON_Delete(root);
         free(settings);
         return send_json_error(req, "400 Bad Request", "time must be an object");
+    }
+    if (ui != NULL && !cJSON_IsObject(ui)) {
+        cJSON_Delete(root);
+        free(settings);
+        return send_json_error(req, "400 Bad Request", "ui must be an object");
     }
 
     bool invalid_type = false;
@@ -302,6 +332,10 @@ esp_err_t api_settings_put_handler(httpd_req_t *req)
         (void)update_string_setting(
             time_cfg, "timezone", settings->time_tz, sizeof(settings->time_tz), &invalid_type, &too_long);
     }
+    if (cJSON_IsObject(ui)) {
+        (void)update_string_setting(
+            ui, "language", settings->ui_language, sizeof(settings->ui_language), &invalid_type, &too_long);
+    }
 
     (void)update_string_setting(
         root, "wifi_ssid", settings->wifi_ssid, sizeof(settings->wifi_ssid), &invalid_type, &too_long);
@@ -318,6 +352,8 @@ esp_err_t api_settings_put_handler(httpd_req_t *req)
         root, "ntp_server", settings->ntp_server, sizeof(settings->ntp_server), &invalid_type, &too_long);
     (void)update_string_setting(
         root, "time_tz", settings->time_tz, sizeof(settings->time_tz), &invalid_type, &too_long);
+    (void)update_string_setting(
+        root, "language", settings->ui_language, sizeof(settings->ui_language), &invalid_type, &too_long);
 
     bool reboot = true;
     cJSON *reboot_item = cJSON_GetObjectItemCaseSensitive(root, "reboot");
@@ -342,7 +378,7 @@ esp_err_t api_settings_put_handler(httpd_req_t *req)
         return send_json_error(
             req,
             "400 Bad Request",
-            "One or more settings values are too long (ssid<=32, wifi_password<=64, country_code<=2, ws_url<=255, token<=511, ntp<=127, timezone<=127)");
+            "One or more settings values are too long (ssid<=32, wifi_password<=64, country_code<=2, ws_url<=255, token<=511, ntp<=127, timezone<=127, language<=15)");
     }
     if (!has_ws_scheme(settings->ha_ws_url)) {
         free(settings);
@@ -360,6 +396,10 @@ esp_err_t api_settings_put_handler(httpd_req_t *req)
     }
     if (settings->time_tz[0] == '\0') {
         strlcpy(settings->time_tz, APP_TIME_TZ, sizeof(settings->time_tz));
+    }
+    if (!normalize_ui_language(settings->ui_language, sizeof(settings->ui_language))) {
+        free(settings);
+        return send_json_error(req, "400 Bad Request", "ui.language must use [a-z0-9_-] and be 2-15 chars");
     }
 
     esp_err_t save_err = runtime_settings_save(settings);

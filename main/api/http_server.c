@@ -19,10 +19,10 @@ extern const uint8_t _binary_styles_css_start[] asm("_binary_styles_css_start");
 extern const uint8_t _binary_styles_css_end[] asm("_binary_styles_css_end");
 
 static const char *s_fallback_index_html =
-    "<!doctype html><html><head><meta charset=\"utf-8\"><title>Smart86 Editor</title>"
+    "<!doctype html><html><head><meta charset=\"utf-8\"><title>BETTA Editor</title>"
     "<meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"></head>"
-    "<body><h1>Smart86 Editor</h1><p>WebUI asset missing, check EMBED_TXTFILES.</p></body></html>";
-static const char *s_fallback_app_js = "console.log('Smart86 WebUI fallback active');";
+    "<body><h1>BETTA Editor</h1><p>WebUI asset missing, check EMBED_TXTFILES.</p></body></html>";
+static const char *s_fallback_app_js = "console.log('BETAA WebUI fallback active');";
 static const char *s_fallback_styles_css = "body{font-family:sans-serif;padding:20px}";
 
 static httpd_handle_t s_server = NULL;
@@ -105,6 +105,7 @@ esp_err_t http_server_start(void)
 
     httpd_config_t cfg = HTTPD_DEFAULT_CONFIG();
     cfg.server_port = APP_HTTP_PORT;
+    cfg.stack_size = APP_HTTP_TASK_STACK;
     int http_task_prio = APP_UI_TASK_PRIO + 1;
     if (http_task_prio >= APP_HA_TASK_PRIO) {
         http_task_prio = APP_HA_TASK_PRIO - 1;

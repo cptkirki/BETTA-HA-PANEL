@@ -6,6 +6,7 @@
 #include <string.h>
 
 #include "ui/theme/theme_default.h"
+#include "ui/ui_i18n.h"
 #include "ui/ui_bindings.h"
 
 typedef enum {
@@ -164,6 +165,29 @@ static const char *button_icon_symbol(w_button_mode_t mode, bool is_on)
 static bool button_label_visible(lv_obj_t *obj)
 {
     return obj != NULL && !lv_obj_has_flag(obj, LV_OBJ_FLAG_HIDDEN);
+}
+
+static const char *button_translate_status_text(const char *status_text)
+{
+    if (status_text == NULL || status_text[0] == '\0') {
+        return ui_i18n_get("common.off", "OFF");
+    }
+    if (strcmp(status_text, "ON") == 0 || strcmp(status_text, "on") == 0) {
+        return ui_i18n_get("common.on", "ON");
+    }
+    if (strcmp(status_text, "OFF") == 0 || strcmp(status_text, "off") == 0) {
+        return ui_i18n_get("common.off", "OFF");
+    }
+    if (strcmp(status_text, "unavailable") == 0) {
+        return ui_i18n_get("common.unavailable", "unavailable");
+    }
+    if (strcmp(status_text, "playing") == 0) {
+        return ui_i18n_get("common.playing", "playing");
+    }
+    if (strcmp(status_text, "paused") == 0) {
+        return ui_i18n_get("common.paused", "paused");
+    }
+    return status_text;
 }
 
 static const lv_font_t *button_pick_icon_font(lv_coord_t available_h)
@@ -495,7 +519,9 @@ static void button_apply_visual(lv_obj_t *card, w_button_ctx_t *ctx, bool is_on,
     }
 
     if (ctx->show_status) {
-        lv_label_set_text(ctx->state_label, status_text != NULL ? status_text : (is_on ? "ON" : "OFF"));
+        lv_label_set_text(
+            ctx->state_label,
+            button_translate_status_text(status_text != NULL ? status_text : (is_on ? "ON" : "OFF")));
     }
 }
 
@@ -620,7 +646,7 @@ esp_err_t w_button_create(const ui_widget_def_t *def, lv_obj_t *parent, ui_widge
 #endif
 
     lv_obj_t *state_label = lv_label_create(card);
-    lv_label_set_text(state_label, "OFF");
+    lv_label_set_text(state_label, ui_i18n_get("common.off", "OFF"));
     lv_obj_set_style_text_font(state_label, LV_FONT_DEFAULT, LV_PART_MAIN);
 #if APP_UI_TILE_LAYOUT_TUNED
     lv_obj_align(state_label, LV_ALIGN_TOP_LEFT, 0, 2);

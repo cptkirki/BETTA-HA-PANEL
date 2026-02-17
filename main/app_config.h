@@ -1,6 +1,6 @@
 #pragma once
 
-#define APP_NAME "smart86-ha-panel"
+#define APP_NAME "betaa-ha-panel"
 
 #define APP_SCREEN_WIDTH 720
 #define APP_SCREEN_HEIGHT 720
@@ -30,8 +30,14 @@
 #define APP_HA_ACCESS_TOKEN_MAX_LEN 512
 #define APP_NTP_SERVER_MAX_LEN 128
 #define APP_TIME_TZ_MAX_LEN 128
+#define APP_UI_LANGUAGE_MAX_LEN 16
 
-#define APP_SETUP_AP_SSID_PREFIX "Smart86-Setup"
+#define APP_UI_DEFAULT_LANGUAGE "de"
+
+#define APP_I18N_DIR "/littlefs/i18n"
+#define APP_I18N_MAX_JSON_LEN 32768
+
+#define APP_SETUP_AP_SSID_PREFIX "BETAA-Setup"
 #define APP_SETUP_AP_PASSWORD ""
 #define APP_SETUP_AP_CHANNEL 1
 #define APP_SETUP_AP_MAX_CONNECTIONS 4
@@ -64,6 +70,7 @@
 #define APP_LVGL_TASK_STACK 24576
 
 #define APP_HTTP_PORT 80
+#define APP_HTTP_TASK_STACK 12288
 
 #ifndef APP_HAVE_HOSTED_C6_FW_IMAGE
 #define APP_HAVE_HOSTED_C6_FW_IMAGE 0

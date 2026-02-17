@@ -1,56 +1,56 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="de">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Smart86 HA Panel Editor</title>
+  <title>BETAA HA Panel - BETTA Editor</title>
   <link rel="stylesheet" href="/styles.css" />
 </head>
 <body>
   <div id="provisioningRoot" class="provisioning-shell hidden">
     <div class="provisioning-card">
       <div id="provisioningWifiPage" class="provisioning-page hidden">
-        <h1>Wi-Fi Provisioning</h1>
-        <p class="provisioning-subtitle">Verbinde das Panel mit deinem WLAN.</p>
-        <label>SSID
+        <h1 id="provWifiTitle">WLAN Provisioning</h1>
+        <p id="provWifiSubtitle" class="provisioning-subtitle">Verbinde das Panel mit deinem WLAN.</p>
+        <label><span id="provWifiSsidLabel">SSID</span>
           <input id="provWifiSsid" type="text" placeholder="MyWiFi" maxlength="32" />
         </label>
-        <label>Country Code
+        <label><span id="provWifiCountryCodeLabel">Laendercode</span>
           <input id="provWifiCountryCode" type="text" list="wifiCountryCodeList" placeholder="US" maxlength="2" />
         </label>
         <div class="row">
           <button id="provScanWifiBtn" class="btn small" type="button">Scan</button>
           <select id="provWifiScanResults">
-            <option value="">No scan yet</option>
+            <option value="">Noch kein Scan</option>
           </select>
         </div>
-        <div id="provWifiScanInfo" class="meta">Click "Scan" to list nearby networks.</div>
-        <label>Password
-          <input id="provWifiPassword" type="password" placeholder="Wi-Fi password" maxlength="64" />
+        <div id="provWifiScanInfo" class="meta">Auf "Scan" klicken, um Netze zu finden.</div>
+        <label><span id="provWifiPasswordLabel">Passwort</span>
+          <input id="provWifiPassword" type="password" placeholder="WLAN Passwort" maxlength="64" />
         </label>
         <label class="row row-inline">
           <input id="provWifiShowPassword" type="checkbox" />
-          <span>Password anzeigen</span>
+          <span id="provWifiShowPasswordLabel">Passwort anzeigen</span>
         </label>
         <div id="provWifiInfo" class="meta"></div>
-        <button id="provWifiSaveBtn" class="btn primary" type="button">Save + Reboot</button>
+        <button id="provWifiSaveBtn" class="btn primary" type="button">Speichern + Neustart</button>
       </div>
 
       <div id="provisioningHaPage" class="provisioning-page hidden">
-        <h1>HA Provisioning</h1>
-        <p class="provisioning-subtitle">Verbinde das Panel mit Home Assistant.</p>
-        <label>WebSocket URL (ws:// oder wss://)
-          <input id="provHaUrl" type="text" placeholder="wss://homeassistant.local:8123/api/websocket" maxlength="255" />
+        <h1 id="provHaTitle">HA Provisioning</h1>
+        <p id="provHaSubtitle" class="provisioning-subtitle">Verbinde das Panel mit Home Assistant.</p>
+        <label><span id="provHaUrlLabel">WebSocket URL (ws:// oder wss://)</span>
+          <input id="provHaUrl" type="text" placeholder="ws://homeassistant.local:8123/api/websocket" maxlength="255" />
         </label>
-        <label>Long-lived Access Token
-          <input id="provHaToken" type="password" placeholder="Home Assistant token" maxlength="511" />
+        <label><span id="provHaTokenLabel">Long-lived Access Token</span>
+          <input id="provHaToken" type="password" placeholder="Home Assistant Token" maxlength="511" />
         </label>
         <label class="row row-inline">
           <input id="provHaShowToken" type="checkbox" />
-          <span>Token anzeigen</span>
+          <span id="provHaShowTokenLabel">Token anzeigen</span>
         </label>
         <div id="provHaInfo" class="meta"></div>
-        <button id="provHaSaveBtn" class="btn primary" type="button">Save + Reboot</button>
+        <button id="provHaSaveBtn" class="btn primary" type="button">Speichern + Neustart</button>
       </div>
     </div>
   </div>
@@ -58,22 +58,22 @@
   <div id="editorShell" class="shell">
     <aside class="sidebar">
       <header class="sidebar-header">
-        <h1>Smart86 Editor</h1>
-        <p>Layout source of truth: JSON</p>
+        <h1 id="sidebarTitle">BETTA Editor</h1>
+        <p id="sidebarSubtitle">Layout Quelle: JSON</p>
       </header>
 
       <div class="mode-tabs">
         <button id="layoutTabBtn" class="btn tab active">Layout</button>
-        <button id="settingsTabBtn" class="btn tab">Settings</button>
+        <button id="settingsTabBtn" class="btn tab">Einstellungen</button>
       </div>
 
       <div id="layoutPane" class="pane">
         <section id="pagesSection" class="panel-section collapsible">
           <div class="section-head">
-            <h2>Pages</h2>
+            <h2>Seiten</h2>
             <div class="row">
-              <button id="addPageBtn" class="btn small">+ Page</button>
-              <button id="deletePageBtn" class="btn small danger">Delete</button>
+              <button id="addPageBtn" class="btn small">+ Seite</button>
+              <button id="deletePageBtn" class="btn small danger">Loeschen</button>
               <button id="togglePagesSection" class="btn small collapse-toggle" type="button" aria-expanded="true"
                 aria-controls="pagesSectionBody">-</button>
             </div>
@@ -81,10 +81,10 @@
           <div id="pagesSectionBody" class="section-body">
             <ul id="pagesList" class="list"></ul>
             <div class="form" style="margin-top: 8px;">
-              <label>Page Title
-                <input id="pageTitleInput" type="text" placeholder="Page name on display" />
+              <label>Seitentitel
+                <input id="pageTitleInput" type="text" placeholder="Seitenname auf dem Display" />
               </label>
-              <button id="applyPageBtn" class="btn">Apply Page Name</button>
+              <button id="applyPageBtn" class="btn">Seitentitel uebernehmen</button>
             </div>
           </div>
           <div id="pagesMiniList" class="section-mini"></div>
@@ -109,19 +109,19 @@
               <button id="addWeather3DayBtn" class="btn small">+ Weather 3d</button>
             </div>
             <ul id="widgetsList" class="list"></ul>
-            <button id="deleteWidgetBtn" class="btn danger">Delete Widget</button>
+            <button id="deleteWidgetBtn" class="btn danger">Widget loeschen</button>
           </div>
         </section>
 
         <section id="inspectorSection" class="panel-section collapsible">
           <div class="section-head">
-            <h2>Inspector</h2>
+            <h2>Inspektor</h2>
             <button id="toggleInspectorSection" class="btn small collapse-toggle" type="button" aria-expanded="true"
               aria-controls="inspectorSectionBody">-</button>
           </div>
           <div id="inspectorSectionBody" class="section-body">
             <div class="form">
-              <label>Title <input id="fTitle" type="text" /></label>
+              <label>Titel <input id="fTitle" type="text" /></label>
               <select id="fType" hidden>
                 <option value="sensor">sensor</option>
                 <option value="button">button</option>
@@ -133,16 +133,16 @@
                 <option value="weather_tile">weather_tile</option>
                 <option value="weather_3day">weather_3day</option>
               </select>
-              <label id="fEntityWrap">Entity
+              <label id="fEntityWrap">Entitaet
                 <input id="fEntity" type="text" list="entityOptions" />
                 <datalist id="entityOptions"></datalist>
               </label>
-              <label id="fSecondaryEntityWrap" class="hidden">Ist Entity (Sensor)
+              <label id="fSecondaryEntityWrap" class="hidden">Ist Entitaet (Sensor)
                 <input id="fSecondaryEntity" type="text" list="sensorEntityOptions" />
                 <datalist id="sensorEntityOptions"></datalist>
               </label>
               <div id="buttonOptions" class="slider-options hidden">
-                <label>Button Mode
+                <label>Button Modus
                   <select id="fButtonMode">
                     <option value="auto">auto (default switch)</option>
                     <option value="play_pause">play/pause (media_player)</option>
@@ -151,12 +151,12 @@
                     <option value="previous">previous (media_player)</option>
                   </select>
                 </label>
-                <label>Button Accent Color
+                <label>Button Akzentfarbe
                   <input id="fButtonAccentColor" type="color" value="#6fe8ff" />
                 </label>
               </div>
               <div id="sliderOptions" class="slider-options hidden">
-                <label>Slider Entity Type
+                <label>Slider Entitaetstyp
                   <select id="fSliderEntityDomain">
                     <option value="auto">auto (light, media_player, cover)</option>
                     <option value="light">light</option>
@@ -164,7 +164,7 @@
                     <option value="cover">cover</option>
                   </select>
                 </label>
-                <label>Slider Direction
+                <label>Slider Richtung
                   <select id="fSliderDirection">
                     <option value="auto">auto (width/height based)</option>
                     <option value="left_to_right">left_to_right (0% -> 100%)</option>
@@ -173,18 +173,18 @@
                     <option value="top_to_bottom">top_to_bottom (100% -> 0%)</option>
                   </select>
                 </label>
-                <label>Slider Accent Color
+                <label>Slider Akzentfarbe
                   <input id="fSliderAccentColor" type="color" value="#6fe8ff" />
                 </label>
               </div>
               <div id="graphOptions" class="slider-options hidden">
-                <label>Graph Line Color
+                <label>Graph Linienfarbe
                   <input id="fGraphLineColor" type="color" value="#6fe8ff" />
                 </label>
-                <label>Time Window (minutes)
+                <label>Zeitfenster (Minuten)
                   <input id="fGraphTimeWindowMin" type="number" min="1" max="1440" step="1" value="120" />
                 </label>
-                <label>Render Points (empty = auto)
+                <label>Render Punkte (leer = auto)
                   <input id="fGraphPointCount" type="number" min="16" max="64" step="1" placeholder="auto" />
                 </label>
               </div>
@@ -194,7 +194,7 @@
                 <label>W <input id="fW" type="number" /></label>
                 <label>H <input id="fH" type="number" /></label>
               </div>
-              <button id="applyInspectorBtn" class="btn">Apply</button>
+              <button id="applyInspectorBtn" class="btn">Uebernehmen</button>
             </div>
           </div>
         </section>
@@ -202,52 +202,52 @@
 
       <div id="settingsPane" class="pane hidden">
         <section>
-          <h2>Wi-Fi</h2>
+          <h2 id="settingsWifiHeading">WLAN</h2>
           <div class="form">
-            <label>SSID
+            <label><span id="settingsWifiSsidLabel">SSID</span>
               <input id="settingsWifiSsid" type="text" placeholder="MyWiFi" maxlength="32" />
             </label>
-            <label>Country Code
+            <label><span id="settingsWifiCountryCodeLabel">Laendercode</span>
               <input id="settingsWifiCountryCode" type="text" list="wifiCountryCodeList" placeholder="US" maxlength="2" />
             </label>
             <div class="row">
-              <button id="scanWifiBtn" class="btn small" type="button">Scan Wi-Fi</button>
+              <button id="scanWifiBtn" class="btn small" type="button">WLAN scannen</button>
               <select id="settingsWifiScanResults">
-                <option value="">No scan yet</option>
+                <option value="">Noch kein Scan</option>
               </select>
             </div>
-            <div id="settingsWifiScanInfo" class="meta">Click "Scan Wi-Fi" to list nearby networks.</div>
-            <label>Password
-              <input id="settingsWifiPassword" type="password" placeholder="Leave empty to keep existing password" maxlength="64" />
+            <div id="settingsWifiScanInfo" class="meta">Auf "WLAN scannen" klicken, um Netze zu finden.</div>
+            <label><span id="settingsWifiPasswordLabel">Passwort</span>
+              <input id="settingsWifiPassword" type="password" placeholder="Leer lassen, um vorhandenes Passwort zu behalten" maxlength="64" />
             </label>
             <div id="settingsWifiInfo" class="meta"></div>
           </div>
         </section>
 
         <section>
-          <h2>Home Assistant</h2>
+          <h2 id="settingsHaHeading">Home Assistant</h2>
           <div class="form">
-            <label>WebSocket URL (ws:// or wss://)
+            <label><span id="settingsHaUrlLabel">WebSocket URL (ws:// oder wss://)</span>
               <input id="settingsHaUrl" type="text" placeholder="wss://homeassistant.local:8123/api/websocket" maxlength="255" />
             </label>
-            <label>Long-lived Access Token
-              <textarea id="settingsHaToken" placeholder="Leave empty to keep existing token" maxlength="511"></textarea>
+            <label><span id="settingsHaTokenLabel">Long-lived Access Token</span>
+              <textarea id="settingsHaToken" placeholder="Leer lassen, um vorhandenen Token zu behalten" maxlength="511"></textarea>
             </label>
             <label class="row">
               <input id="settingsHaRestEnabled" type="checkbox" />
-              <span>Enable HA REST fallback (Default: Off, WS-only preferred)</span>
+              <span id="settingsHaRestEnabledLabel">HA REST Fallback aktivieren (Standard: Aus, WS bevorzugt)</span>
             </label>
             <div id="settingsHaInfo" class="meta"></div>
           </div>
         </section>
 
         <section>
-          <h2>Time</h2>
+          <h2 id="settingsTimeHeading">Zeit</h2>
           <div class="form">
-            <label>NTP Server
+            <label><span id="settingsNtpServerLabel">NTP Server</span>
               <input id="settingsNtpServer" type="text" placeholder="pool.ntp.org" maxlength="127" />
             </label>
-            <label>Timezone (POSIX TZ)
+            <label><span id="settingsTimezoneLabel">Zeitzone (POSIX TZ)</span>
               <input id="settingsTimezone" type="text" placeholder="CET-1CEST,M3.5.0/2,M10.5.0/3" maxlength="127" />
             </label>
             <div id="settingsTimeInfo" class="meta"></div>
@@ -255,18 +255,40 @@
         </section>
 
         <section>
-          <h2>Setup AP</h2>
-          <div id="settingsApInfo" class="meta"></div>
-          <div class="meta">If setup AP is active, connect to it and open <code>http://192.168.4.1</code>.</div>
+          <h2 id="settingsUiHeading">UI</h2>
+          <div class="form">
+            <label><span id="settingsLanguageLabel">Sprache</span>
+              <select id="settingsLanguage"></select>
+            </label>
+            <div id="settingsUiInfo" class="meta"></div>
+            <div class="row">
+              <button id="reloadLanguagesBtn" class="btn small" type="button">Sprachen neu laden</button>
+              <button id="downloadLanguageBtn" class="btn small" type="button">JSON herunterladen</button>
+            </div>
+            <label><span id="uploadLanguageCodeLabel">Sprachcode</span>
+              <input id="uploadLanguageCode" type="text" maxlength="15" placeholder="fr" />
+            </label>
+            <label><span id="uploadLanguageFileLabel">Uebersetzungsdatei (JSON)</span>
+              <input id="uploadLanguageFile" type="file" accept="application/json,.json" />
+            </label>
+            <button id="uploadLanguageBtn" class="btn" type="button">Upload / Sprache hinzufuegen</button>
+            <div id="settingsTranslationInfo" class="meta"></div>
+          </div>
         </section>
 
         <section>
-          <h2>Settings Actions</h2>
+          <h2 id="settingsApHeading">Setup AP</h2>
+          <div id="settingsApInfo" class="meta"></div>
+          <div id="settingsApHint" class="meta">Wenn Setup AP aktiv ist, verbinden und <code>http://192.168.4.1</code> oeffnen.</div>
+        </section>
+
+        <section>
+          <h2 id="settingsActionsHeading">Einstellungsaktionen</h2>
           <div class="row">
-            <button id="reloadSettingsBtn" class="btn">Reload Settings</button>
-            <button id="saveSettingsBtn" class="btn primary">Save + Reboot</button>
+            <button id="reloadSettingsBtn" class="btn">Einstellungen neu laden</button>
+            <button id="saveSettingsBtn" class="btn primary">Speichern + Neustart</button>
           </div>
-          <div class="meta">After save, the device reboots and may switch from setup AP to your home Wi-Fi.</div>
+          <div id="settingsActionsHint" class="meta">Nach dem Speichern startet das Geraet neu und wechselt ggf. vom Setup AP ins Heim-WLAN.</div>
         </section>
       </div>
     </aside>
@@ -274,7 +296,7 @@
     <main class="workspace">
       <div class="workspace-top">
         <h2 id="canvasTitle">Canvas</h2>
-        <div id="status" class="status">Idle</div>
+        <div id="status" class="status">Bereit</div>
       </div>
       <div class="workspace-body">
         <div class="canvas-wrap">
@@ -282,17 +304,17 @@
         </div>
         <aside class="actions-panel">
           <section class="panel-section">
-            <h2>Actions</h2>
+            <h2>Aktionen</h2>
             <div class="row">
-              <button id="reloadBtn" class="btn">Reload</button>
-              <button id="saveBtn" class="btn primary">Save</button>
+              <button id="reloadBtn" class="btn">Neu laden</button>
+              <button id="saveBtn" class="btn primary">Speichern</button>
               <button id="exportBtn" class="btn">Export</button>
             </div>
             <div class="row">
-              <button id="importBtn" class="btn">Import JSON</button>
+              <button id="importBtn" class="btn">JSON importieren</button>
               <input id="importFile" type="file" accept="application/json" />
             </div>
-            <textarea id="jsonPaste" placeholder="Paste layout JSON here"></textarea>
+            <textarea id="jsonPaste" placeholder="Layout JSON hier einfuegen"></textarea>
           </section>
         </aside>
       </div>

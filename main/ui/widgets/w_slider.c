@@ -9,6 +9,7 @@
 #include "cJSON.h"
 
 #include "ui/theme/theme_default.h"
+#include "ui/ui_i18n.h"
 #include "ui/ui_bindings.h"
 
 typedef enum {
@@ -214,6 +215,23 @@ static bool slider_parse_hex_color(const char *text, lv_color_t *out)
                    (uint32_t)((b_hi << 4) | b_lo);
     *out = lv_color_hex(rgb);
     return true;
+}
+
+static const char *slider_translate_status_text(const char *status_text)
+{
+    if (status_text == NULL || status_text[0] == '\0') {
+        return ui_i18n_get("common.off", "OFF");
+    }
+    if (strcmp(status_text, "ON") == 0 || strcmp(status_text, "on") == 0) {
+        return ui_i18n_get("common.on", "ON");
+    }
+    if (strcmp(status_text, "OFF") == 0 || strcmp(status_text, "off") == 0) {
+        return ui_i18n_get("common.off", "OFF");
+    }
+    if (strcmp(status_text, "unavailable") == 0) {
+        return ui_i18n_get("common.unavailable", "unavailable");
+    }
+    return status_text;
 }
 
 static w_slider_direction_t slider_direction_from_text(const char *direction)
@@ -450,7 +468,9 @@ static void slider_apply_visual(w_slider_ctx_t *ctx)
     ctx->suppress_event = false;
 
     slider_set_value_label(ctx->value_label, ctx->value);
-    lv_label_set_text(ctx->state_label, ctx->unavailable ? "unavailable" : (ctx->is_on ? "ON" : "OFF"));
+    lv_label_set_text(
+        ctx->state_label,
+        slider_translate_status_text(ctx->unavailable ? "unavailable" : (ctx->is_on ? "ON" : "OFF")));
 }
 
 static void w_slider_event_cb(lv_event_t *event)
@@ -529,7 +549,7 @@ esp_err_t w_slider_create(const ui_widget_def_t *def, lv_obj_t *parent, ui_widge
     lv_obj_align(title, LV_ALIGN_BOTTOM_MID, 0, APP_UI_TILE_LAYOUT_TUNED ? -12 : -10);
 
     lv_obj_t *state = lv_label_create(card);
-    lv_label_set_text(state, "OFF");
+    lv_label_set_text(state, ui_i18n_get("common.off", "OFF"));
     lv_obj_set_style_text_font(state, LV_FONT_DEFAULT, LV_PART_MAIN);
     lv_obj_align(state, LV_ALIGN_TOP_LEFT, 0, APP_UI_TILE_LAYOUT_TUNED ? 2 : 0);
 

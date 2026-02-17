@@ -8,6 +8,7 @@
 #include "esp_log.h"
 #include "nvs.h"
 
+#include "settings/i18n_store.h"
 #include "util/log_tags.h"
 
 #define SETTINGS_NVS_NAMESPACE "runtime_sec"
@@ -17,6 +18,24 @@
 static bool is_placeholder(const char *text)
 {
     return text == NULL || text[0] == '\0' || strstr(text, "YOUR_") != NULL;
+}
+
+static void normalize_ui_language(char *language, size_t language_len)
+{
+    if (language == NULL || language_len == 0) {
+        return;
+    }
+    if (language[0] == '\0') {
+        strlcpy(language, APP_UI_DEFAULT_LANGUAGE, language_len);
+        return;
+    }
+
+    char normalized[APP_UI_LANGUAGE_MAX_LEN] = {0};
+    if (!i18n_store_normalize_language_code(language, normalized, sizeof(normalized))) {
+        strlcpy(language, APP_UI_DEFAULT_LANGUAGE, language_len);
+        return;
+    }
+    strlcpy(language, normalized, language_len);
 }
 
 static void json_copy_string(cJSON *obj, const char *key, char *dst, size_t dst_len)
@@ -80,11 +99,13 @@ static esp_err_t write_public_settings_file(const runtime_settings_t *settings)
     cJSON *wifi = cJSON_CreateObject();
     cJSON *ha = cJSON_CreateObject();
     cJSON *time_cfg = cJSON_CreateObject();
-    if (root == NULL || wifi == NULL || ha == NULL || time_cfg == NULL) {
+    cJSON *ui = cJSON_CreateObject();
+    if (root == NULL || wifi == NULL || ha == NULL || time_cfg == NULL || ui == NULL) {
         cJSON_Delete(root);
         cJSON_Delete(wifi);
         cJSON_Delete(ha);
         cJSON_Delete(time_cfg);
+        cJSON_Delete(ui);
         return ESP_ERR_NO_MEM;
     }
 
@@ -101,6 +122,9 @@ static esp_err_t write_public_settings_file(const runtime_settings_t *settings)
     cJSON_AddStringToObject(time_cfg, "ntp_server", settings->ntp_server);
     cJSON_AddStringToObject(time_cfg, "timezone", settings->time_tz);
     cJSON_AddItemToObject(root, "time", time_cfg);
+
+    cJSON_AddStringToObject(ui, "language", settings->ui_language);
+    cJSON_AddItemToObject(root, "ui", ui);
 
     char *payload = cJSON_PrintUnformatted(root);
     cJSON_Delete(root);
@@ -152,6 +176,7 @@ static esp_err_t parse_settings_json(
     cJSON *wifi = cJSON_GetObjectItemCaseSensitive(root, "wifi");
     cJSON *ha = cJSON_GetObjectItemCaseSensitive(root, "ha");
     cJSON *time_cfg = cJSON_GetObjectItemCaseSensitive(root, "time");
+    cJSON *ui = cJSON_GetObjectItemCaseSensitive(root, "ui");
 
     if (cJSON_IsObject(wifi)) {
         json_copy_string(wifi, "ssid", out->wifi_ssid, sizeof(out->wifi_ssid));
@@ -217,6 +242,12 @@ static esp_err_t parse_settings_json(
     } else {
         json_copy_string(root, "ntp_server", out->ntp_server, sizeof(out->ntp_server));
         json_copy_string(root, "time_tz", out->time_tz, sizeof(out->time_tz));
+    }
+
+    if (cJSON_IsObject(ui)) {
+        json_copy_string(ui, "language", out->ui_language, sizeof(out->ui_language));
+    } else {
+        json_copy_string(root, "language", out->ui_language, sizeof(out->ui_language));
     }
 
     cJSON_Delete(root);
@@ -368,6 +399,7 @@ void runtime_settings_set_defaults(runtime_settings_t *out)
     out->ha_rest_enabled = false;
     strlcpy(out->ntp_server, APP_NTP_SERVER, sizeof(out->ntp_server));
     strlcpy(out->time_tz, APP_TIME_TZ, sizeof(out->time_tz));
+    strlcpy(out->ui_language, APP_UI_DEFAULT_LANGUAGE, sizeof(out->ui_language));
 }
 
 esp_err_t runtime_settings_load(runtime_settings_t *out)
@@ -394,6 +426,7 @@ esp_err_t runtime_settings_load(runtime_settings_t *out)
     if (out->wifi_country_code[0] == '\0') {
         strlcpy(out->wifi_country_code, APP_WIFI_COUNTRY_CODE, sizeof(out->wifi_country_code));
     }
+    normalize_ui_language(out->ui_language, sizeof(out->ui_language));
 
     char nvs_wifi_password[APP_WIFI_PASSWORD_MAX_LEN] = {0};
     bool has_nvs_wifi_password = false;

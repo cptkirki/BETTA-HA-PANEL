@@ -35,6 +35,293 @@ const BUTTON_MODES = new Set([
   "next",
   "previous",
 ]);
+const LANGUAGE_CODE_RE = /^[a-z0-9][a-z0-9_-]{1,14}$/;
+const DEFAULT_UI_LANGUAGE = "de";
+
+const WEB_I18N_BUILTIN = {
+  en: {
+    "tabs.layout": "Layout",
+    "tabs.settings": "Settings",
+    "sidebar.title": "BETTA Editor",
+    "sidebar.subtitle": "Layout source of truth: JSON",
+    "provision.wifi.title": "Wi-Fi Provisioning",
+    "provision.wifi.subtitle": "Connect the panel to your Wi-Fi.",
+    "provision.wifi.ssid": "SSID",
+    "provision.wifi.country_code": "Country Code",
+    "provision.wifi.password": "Password",
+    "provision.wifi.show_password": "Show password",
+    "provision.ha.title": "HA Provisioning",
+    "provision.ha.subtitle": "Connect the panel to Home Assistant.",
+    "provision.ha.ws_url": "WebSocket URL (ws:// or wss://)",
+    "provision.ha.token": "Long-lived Access Token",
+    "provision.ha.show_token": "Show token",
+    "settings.wifi.heading": "Wi-Fi",
+    "settings.wifi.ssid": "SSID",
+    "settings.wifi.country_code": "Country Code",
+    "settings.wifi.password": "Password",
+    "settings.ha.heading": "Home Assistant",
+    "settings.ha.ws_url": "WebSocket URL (ws:// or wss://)",
+    "settings.ha.token": "Long-lived Access Token",
+    "settings.ha.rest_fallback": "Enable HA REST fallback (Default: Off, WS-only preferred)",
+    "settings.time.heading": "Time",
+    "settings.time.ntp_server": "NTP Server",
+    "settings.time.timezone": "Timezone (POSIX TZ)",
+    "settings.ui.heading": "UI",
+    "settings.ui.language": "Language",
+    "settings.ui.reload_languages": "Reload Languages",
+    "settings.ui.download_json": "Download JSON",
+    "settings.ui.upload_code": "Language Code",
+    "settings.ui.upload_file": "Translation JSON File",
+    "settings.ui.upload_button": "Upload / Add Language",
+    "settings.ap.heading": "Setup AP",
+    "settings.ap.hint": "If setup AP is active, connect to it and open <code>http://192.168.4.1</code>.",
+    "settings.actions.heading": "Settings Actions",
+    "settings.actions.reload": "Reload Settings",
+    "settings.actions.save": "Save + Reboot",
+    "settings.actions.hint": "After save, the device reboots and may switch from setup AP to your home Wi-Fi.",
+    "settings.info.configured": "Configured",
+    "settings.info.connected": "Connected",
+    "settings.info.password_stored": "Password stored",
+    "settings.info.country": "Country",
+    "settings.info.token_stored": "Token stored",
+    "settings.info.rest_fallback": "REST fallback",
+    "common.yes": "yes",
+    "common.no": "no",
+    "common.scan": "Scan",
+    "common.scan_wifi": "Scan Wi-Fi",
+    "common.save_reboot": "Save + Reboot",
+    "status.idle": "Idle",
+    "status.loading_settings": "Loading settings...",
+    "status.settings_loaded": "Settings loaded",
+    "status.settings_load_failed": "Settings load failed: {error}",
+    "status.saving_settings": "Saving settings...",
+    "status.settings_saved_reboot": "Settings saved. Device reboots in ~2s. Reconnect and reopen the panel URL.",
+    "status.wifi_scan_running": "Scanning Wi-Fi...",
+    "status.wifi_scan_complete": "Wi-Fi scan complete ({count} networks)",
+    "status.wifi_scan_failed": "Wi-Fi scan failed: {error}",
+    "wifi.scan_unavailable": "Wi-Fi scan is unavailable in setup AP mode on this hardware. Enter SSID manually.",
+    "wifi.scan_click": "Click \"Scan Wi-Fi\" to list nearby networks.",
+    "wifi.scan_click_short": "Click \"Scan\" to list nearby networks.",
+    "wifi.scan_no_networks": "No networks found. Move closer to your router and scan again.",
+    "wifi.scan_found": "{count} network(s) found. Select one to fill SSID.",
+    "wifi.scan.option_unavailable": "Scan unavailable",
+    "wifi.scan.option_scanning": "Scanning...",
+    "wifi.scan.option_not_run": "No scan yet",
+    "wifi.scan.option_no_networks": "No networks found",
+    "wifi.scan.option_select": "Select network ({count} found)",
+    "settings.time.info": "Applied after reboot. Time sync starts when Wi-Fi is connected.",
+    "settings.ui.info": "Applied after reboot.",
+    "settings.ap.active": "Setup AP active: {ssid}\\nOpen http://192.168.4.1 while connected to this AP.",
+    "settings.ap.inactive": "Setup AP inactive.\\nUse the panel IP in your home Wi-Fi network.",
+    "settings.translation.info": "Upload a JSON file to add or update a language.",
+    "settings.translation.upload_ok": "Language \"{lang}\" uploaded.",
+    "settings.translation.upload_fail": "Upload failed: {error}",
+    "settings.translation.no_file": "Choose a JSON file first.",
+    "settings.translation.invalid_code": "Language code must use [a-z0-9_-] and be 2-15 chars.",
+    "settings.language.invalid_country": "Wi-Fi country code must be a 2-letter ISO code (e.g. US, DE)",
+    "settings.language.invalid_ha_url": "HA URL must start with ws:// or wss://",
+    "provision.wifi.required_ssid": "SSID is required.",
+    "provision.wifi.required_country": "Country code must be 2 letters (e.g. US, DE).",
+    "provision.ha.required_url": "WebSocket URL is required.",
+    "provision.ha.invalid_url": "HA URL must start with ws:// or wss://.",
+    "provision.ha.required_token": "Long-lived Access Token is required.",
+    "provision.saving_reboot": "Saving settings and rebooting...",
+    "provision.saved_reboot": "Settings saved. Device reboots in ~2s.",
+    "provision.wifi.hint": "Save reboots the panel. After reboot, HA provisioning is shown.",
+    "provision.ha.hint": "Save reboots the panel. After reboot, the editor is unlocked.",
+    "settings.language.option_de": "Deutsch",
+    "settings.language.option_en": "English",
+    "settings.language.option_es": "Espanol",
+  },
+  de: {
+    "tabs.layout": "Layout",
+    "tabs.settings": "Einstellungen",
+    "sidebar.title": "BETTA Editor",
+    "sidebar.subtitle": "Layout Quelle: JSON",
+    "provision.wifi.title": "WLAN Provisioning",
+    "provision.wifi.subtitle": "Verbinde das Panel mit deinem WLAN.",
+    "provision.wifi.ssid": "SSID",
+    "provision.wifi.country_code": "Laendercode",
+    "provision.wifi.password": "Passwort",
+    "provision.wifi.show_password": "Passwort anzeigen",
+    "provision.ha.title": "HA Provisioning",
+    "provision.ha.subtitle": "Verbinde das Panel mit Home Assistant.",
+    "provision.ha.ws_url": "WebSocket URL (ws:// oder wss://)",
+    "provision.ha.token": "Long-lived Access Token",
+    "provision.ha.show_token": "Token anzeigen",
+    "settings.wifi.heading": "WLAN",
+    "settings.wifi.ssid": "SSID",
+    "settings.wifi.country_code": "Laendercode",
+    "settings.wifi.password": "Passwort",
+    "settings.ha.heading": "Home Assistant",
+    "settings.ha.ws_url": "WebSocket URL (ws:// oder wss://)",
+    "settings.ha.token": "Long-lived Access Token",
+    "settings.ha.rest_fallback": "HA REST Fallback aktivieren (Standard: Aus, WS bevorzugt)",
+    "settings.time.heading": "Zeit",
+    "settings.time.ntp_server": "NTP Server",
+    "settings.time.timezone": "Zeitzone (POSIX TZ)",
+    "settings.ui.heading": "UI",
+    "settings.ui.language": "Sprache",
+    "settings.ui.reload_languages": "Sprachen neu laden",
+    "settings.ui.download_json": "JSON herunterladen",
+    "settings.ui.upload_code": "Sprachcode",
+    "settings.ui.upload_file": "Uebersetzungsdatei (JSON)",
+    "settings.ui.upload_button": "Upload / Sprache hinzufuegen",
+    "settings.ap.heading": "Setup AP",
+    "settings.ap.hint": "Wenn Setup AP aktiv ist, verbinden und <code>http://192.168.4.1</code> oeffnen.",
+    "settings.actions.heading": "Einstellungsaktionen",
+    "settings.actions.reload": "Einstellungen neu laden",
+    "settings.actions.save": "Speichern + Neustart",
+    "settings.actions.hint": "Nach dem Speichern startet das Geraet neu und wechselt ggf. vom Setup AP ins Heim-WLAN.",
+    "settings.info.configured": "Konfiguriert",
+    "settings.info.connected": "Verbunden",
+    "settings.info.password_stored": "Passwort gespeichert",
+    "settings.info.country": "Land",
+    "settings.info.token_stored": "Token gespeichert",
+    "settings.info.rest_fallback": "REST Fallback",
+    "common.yes": "ja",
+    "common.no": "nein",
+    "common.scan": "Scan",
+    "common.scan_wifi": "WLAN scannen",
+    "common.save_reboot": "Speichern + Neustart",
+    "status.idle": "Bereit",
+    "status.loading_settings": "Einstellungen werden geladen...",
+    "status.settings_loaded": "Einstellungen geladen",
+    "status.settings_load_failed": "Einstellungen laden fehlgeschlagen: {error}",
+    "status.saving_settings": "Einstellungen werden gespeichert...",
+    "status.settings_saved_reboot": "Einstellungen gespeichert. Das Geraet startet in ~2s neu.",
+    "status.wifi_scan_running": "WLAN Suche laeuft...",
+    "status.wifi_scan_complete": "WLAN Scan fertig ({count} Netze)",
+    "status.wifi_scan_failed": "WLAN Scan fehlgeschlagen: {error}",
+    "wifi.scan_unavailable": "WLAN Scan ist im Setup AP Modus auf dieser Hardware nicht verfuegbar. SSID manuell eingeben.",
+    "wifi.scan_click": "Auf \"WLAN scannen\" klicken, um Netze zu finden.",
+    "wifi.scan_click_short": "Auf \"Scan\" klicken, um Netze zu finden.",
+    "wifi.scan_no_networks": "Keine Netze gefunden. Gehe naeher an den Router und versuche es erneut.",
+    "wifi.scan_found": "{count} Netzwerk(e) gefunden. SSID auswaehlen.",
+    "wifi.scan.option_unavailable": "Scan nicht verfuegbar",
+    "wifi.scan.option_scanning": "Suche laeuft...",
+    "wifi.scan.option_not_run": "Noch kein Scan",
+    "wifi.scan.option_no_networks": "Keine Netze gefunden",
+    "wifi.scan.option_select": "Netz waehlen ({count} gefunden)",
+    "settings.time.info": "Wird nach Neustart angewendet. Zeitsync startet bei WLAN Verbindung.",
+    "settings.ui.info": "Wird nach Neustart angewendet.",
+    "settings.ap.active": "Setup AP aktiv: {ssid}\\nhttp://192.168.4.1 im AP oeffnen.",
+    "settings.ap.inactive": "Setup AP inaktiv.\\nNutze die Panel-IP im Heimnetz.",
+    "settings.translation.info": "JSON hochladen, um eine Sprache hinzuzufuegen oder zu aktualisieren.",
+    "settings.translation.upload_ok": "Sprache \"{lang}\" hochgeladen.",
+    "settings.translation.upload_fail": "Upload fehlgeschlagen: {error}",
+    "settings.translation.no_file": "Bitte zuerst eine JSON Datei auswaehlen.",
+    "settings.translation.invalid_code": "Sprachcode muss [a-z0-9_-] nutzen und 2-15 Zeichen haben.",
+    "settings.language.invalid_country": "WLAN Laendercode muss ein 2-stelliger ISO Code sein (z.B. US, DE)",
+    "settings.language.invalid_ha_url": "HA URL muss mit ws:// oder wss:// beginnen",
+    "provision.wifi.required_ssid": "SSID ist erforderlich.",
+    "provision.wifi.required_country": "Laendercode muss 2 Buchstaben haben (z.B. US, DE).",
+    "provision.ha.required_url": "WebSocket URL ist erforderlich.",
+    "provision.ha.invalid_url": "HA URL muss mit ws:// oder wss:// beginnen.",
+    "provision.ha.required_token": "Long-lived Access Token ist erforderlich.",
+    "provision.saving_reboot": "Speichere Einstellungen und starte neu...",
+    "provision.saved_reboot": "Einstellungen gespeichert. Geraet startet in ~2s neu.",
+    "provision.wifi.hint": "Speichern startet das Panel neu. Danach folgt die HA Einrichtung.",
+    "provision.ha.hint": "Speichern startet das Panel neu. Danach ist der Editor freigeschaltet.",
+    "settings.language.option_de": "Deutsch",
+    "settings.language.option_en": "Englisch",
+    "settings.language.option_es": "Spanisch",
+  },
+  es: {
+    "tabs.layout": "Diseno",
+    "tabs.settings": "Configuracion",
+    "sidebar.title": "BETTA Editor",
+    "sidebar.subtitle": "Fuente de verdad del layout: JSON",
+    "provision.wifi.title": "Provision Wi-Fi",
+    "provision.wifi.subtitle": "Conecta el panel a tu red Wi-Fi.",
+    "provision.wifi.ssid": "SSID",
+    "provision.wifi.country_code": "Codigo de pais",
+    "provision.wifi.password": "Contrasena",
+    "provision.wifi.show_password": "Mostrar contrasena",
+    "provision.ha.title": "Provision HA",
+    "provision.ha.subtitle": "Conecta el panel a Home Assistant.",
+    "provision.ha.ws_url": "URL WebSocket (ws:// o wss://)",
+    "provision.ha.token": "Token de acceso de larga duracion",
+    "provision.ha.show_token": "Mostrar token",
+    "settings.wifi.heading": "Wi-Fi",
+    "settings.wifi.ssid": "SSID",
+    "settings.wifi.country_code": "Codigo de pais",
+    "settings.wifi.password": "Contrasena",
+    "settings.ha.heading": "Home Assistant",
+    "settings.ha.ws_url": "URL WebSocket (ws:// o wss://)",
+    "settings.ha.token": "Token de acceso de larga duracion",
+    "settings.ha.rest_fallback": "Activar fallback REST de HA (por defecto: off, se prefiere WS)",
+    "settings.time.heading": "Hora",
+    "settings.time.ntp_server": "Servidor NTP",
+    "settings.time.timezone": "Zona horaria (POSIX TZ)",
+    "settings.ui.heading": "UI",
+    "settings.ui.language": "Idioma",
+    "settings.ui.reload_languages": "Recargar idiomas",
+    "settings.ui.download_json": "Descargar JSON",
+    "settings.ui.upload_code": "Codigo de idioma",
+    "settings.ui.upload_file": "Archivo JSON de traduccion",
+    "settings.ui.upload_button": "Subir / Agregar idioma",
+    "settings.ap.heading": "AP de setup",
+    "settings.ap.hint": "Si el AP de setup esta activo, conectate y abre <code>http://192.168.4.1</code>.",
+    "settings.actions.heading": "Acciones de configuracion",
+    "settings.actions.reload": "Recargar configuracion",
+    "settings.actions.save": "Guardar + Reiniciar",
+    "settings.actions.hint": "Despues de guardar, el dispositivo reinicia y puede cambiar del AP de setup al Wi-Fi de casa.",
+    "settings.info.configured": "Configurado",
+    "settings.info.connected": "Conectado",
+    "settings.info.password_stored": "Contrasena guardada",
+    "settings.info.country": "Pais",
+    "settings.info.token_stored": "Token guardado",
+    "settings.info.rest_fallback": "Fallback REST",
+    "common.yes": "si",
+    "common.no": "no",
+    "common.scan": "Escanear",
+    "common.scan_wifi": "Escanear Wi-Fi",
+    "common.save_reboot": "Guardar + Reiniciar",
+    "status.idle": "Listo",
+    "status.loading_settings": "Cargando configuracion...",
+    "status.settings_loaded": "Configuracion cargada",
+    "status.settings_load_failed": "Error al cargar configuracion: {error}",
+    "status.saving_settings": "Guardando configuracion...",
+    "status.settings_saved_reboot": "Configuracion guardada. El dispositivo reinicia en ~2s.",
+    "status.wifi_scan_running": "Escaneo Wi-Fi en curso...",
+    "status.wifi_scan_complete": "Escaneo Wi-Fi completo ({count} redes)",
+    "status.wifi_scan_failed": "Error en escaneo Wi-Fi: {error}",
+    "wifi.scan_unavailable": "El escaneo Wi-Fi no esta disponible en modo setup AP en este hardware. Ingresa SSID manualmente.",
+    "wifi.scan_click": "Pulsa \"Escanear Wi-Fi\" para listar redes cercanas.",
+    "wifi.scan_click_short": "Pulsa \"Escanear\" para listar redes cercanas.",
+    "wifi.scan_no_networks": "No se encontraron redes. Acercate al router e intenta de nuevo.",
+    "wifi.scan_found": "{count} red(es) encontradas. Selecciona una para llenar SSID.",
+    "wifi.scan.option_unavailable": "Escaneo no disponible",
+    "wifi.scan.option_scanning": "Escaneando...",
+    "wifi.scan.option_not_run": "Sin escaneo",
+    "wifi.scan.option_no_networks": "No se encontraron redes",
+    "wifi.scan.option_select": "Selecciona red ({count} encontradas)",
+    "settings.time.info": "Se aplica despues de reiniciar. La sincronizacion inicia cuando Wi-Fi esta conectado.",
+    "settings.ui.info": "Se aplica despues de reiniciar.",
+    "settings.ap.active": "AP de setup activo: {ssid}\\nAbre http://192.168.4.1 conectado a este AP.",
+    "settings.ap.inactive": "AP de setup inactivo.\\nUsa la IP del panel en tu Wi-Fi.",
+    "settings.translation.info": "Sube un JSON para agregar o actualizar un idioma.",
+    "settings.translation.upload_ok": "Idioma \"{lang}\" subido.",
+    "settings.translation.upload_fail": "Error de subida: {error}",
+    "settings.translation.no_file": "Selecciona primero un archivo JSON.",
+    "settings.translation.invalid_code": "El codigo de idioma debe usar [a-z0-9_-] y tener 2-15 caracteres.",
+    "settings.language.invalid_country": "El codigo de pais Wi-Fi debe ser ISO de 2 letras (p.ej. US, DE)",
+    "settings.language.invalid_ha_url": "La URL HA debe empezar con ws:// o wss://",
+    "provision.wifi.required_ssid": "SSID es obligatorio.",
+    "provision.wifi.required_country": "El codigo de pais debe tener 2 letras (p.ej. US, DE).",
+    "provision.ha.required_url": "La URL WebSocket es obligatoria.",
+    "provision.ha.invalid_url": "La URL HA debe empezar con ws:// o wss://.",
+    "provision.ha.required_token": "El token de acceso es obligatorio.",
+    "provision.saving_reboot": "Guardando configuracion y reiniciando...",
+    "provision.saved_reboot": "Configuracion guardada. El dispositivo reinicia en ~2s.",
+    "provision.wifi.hint": "Guardar reinicia el panel. Despues se muestra la provision de HA.",
+    "provision.ha.hint": "Guardar reinicia el panel. Despues se desbloquea el editor.",
+    "settings.language.option_de": "Aleman",
+    "settings.language.option_en": "Ingles",
+    "settings.language.option_es": "Espanol",
+  },
+};
 
 function widgetSizeLimits(type) {
   const fallback = {
@@ -97,6 +384,10 @@ const editor = {
   wifiScanHasRun: false,
   wifiScanInProgress: false,
   wifiScanSupported: true,
+  languageCatalog: [],
+  i18nLanguage: DEFAULT_UI_LANGUAGE,
+  i18nMap: { ...(WEB_I18N_BUILTIN.en || {}) },
+  i18nEffective: {},
   sectionCollapsed: {
     pages: false,
     widgets: false,
@@ -180,9 +471,17 @@ const el = {
   settingsHaRestEnabled: document.getElementById("settingsHaRestEnabled"),
   settingsNtpServer: document.getElementById("settingsNtpServer"),
   settingsTimezone: document.getElementById("settingsTimezone"),
+  settingsLanguage: document.getElementById("settingsLanguage"),
+  reloadLanguagesBtn: document.getElementById("reloadLanguagesBtn"),
+  downloadLanguageBtn: document.getElementById("downloadLanguageBtn"),
+  uploadLanguageCode: document.getElementById("uploadLanguageCode"),
+  uploadLanguageFile: document.getElementById("uploadLanguageFile"),
+  uploadLanguageBtn: document.getElementById("uploadLanguageBtn"),
+  settingsTranslationInfo: document.getElementById("settingsTranslationInfo"),
   settingsWifiInfo: document.getElementById("settingsWifiInfo"),
   settingsHaInfo: document.getElementById("settingsHaInfo"),
   settingsTimeInfo: document.getElementById("settingsTimeInfo"),
+  settingsUiInfo: document.getElementById("settingsUiInfo"),
   settingsApInfo: document.getElementById("settingsApInfo"),
   reloadSettingsBtn: document.getElementById("reloadSettingsBtn"),
   saveSettingsBtn: document.getElementById("saveSettingsBtn"),
@@ -345,6 +644,257 @@ function normalizeCountryCode(value) {
   return /^[A-Z]{2}$/.test(normalized) ? normalized : "";
 }
 
+function normalizeLanguageCode(value, fallback = "") {
+  const normalized = (typeof value === "string" ? value : "").trim().toLowerCase();
+  if (!normalized) return fallback;
+  return LANGUAGE_CODE_RE.test(normalized) ? normalized : fallback;
+}
+
+function normalizeUiLanguage(value) {
+  return normalizeLanguageCode(value, DEFAULT_UI_LANGUAGE);
+}
+
+function templateString(text, vars = {}) {
+  return String(text).replace(/\{([a-zA-Z0-9_]+)\}/g, (match, key) => {
+    if (!Object.prototype.hasOwnProperty.call(vars, key)) return match;
+    return String(vars[key]);
+  });
+}
+
+function t(key, vars = {}, fallbackText = null) {
+  const source = editor.i18nMap || {};
+  const fallback = WEB_I18N_BUILTIN.en || {};
+  const raw = source[key] ?? fallback[key] ?? fallbackText ?? key;
+  return templateString(raw, vars);
+}
+
+function flattenTranslationObject(obj, prefix = "", out = {}) {
+  if (!obj || typeof obj !== "object") return out;
+  for (const [key, value] of Object.entries(obj)) {
+    const path = prefix ? `${prefix}.${key}` : key;
+    if (value && typeof value === "object" && !Array.isArray(value)) {
+      flattenTranslationObject(value, path, out);
+    } else if (typeof value === "string") {
+      out[path] = value;
+    }
+  }
+  return out;
+}
+
+function setTextById(id, key, vars) {
+  const node = document.getElementById(id);
+  if (!node) return;
+  node.textContent = t(key, vars);
+}
+
+function setPlaceholderById(id, key, vars) {
+  const node = document.getElementById(id);
+  if (!node) return;
+  node.placeholder = t(key, vars);
+}
+
+function renderLanguageOptions() {
+  if (!el.settingsLanguage) return;
+
+  const optionCodes = new Set();
+  optionCodes.add(DEFAULT_UI_LANGUAGE);
+  optionCodes.add("en");
+  optionCodes.add("es");
+  optionCodes.add(editor.i18nLanguage || DEFAULT_UI_LANGUAGE);
+  for (const language of editor.languageCatalog || []) {
+    const code = normalizeLanguageCode(language?.code, "");
+    if (code) optionCodes.add(code);
+  }
+
+  const current = normalizeUiLanguage(el.settingsLanguage.value || editor.i18nLanguage);
+  const sorted = Array.from(optionCodes).sort((a, b) => a.localeCompare(b));
+  el.settingsLanguage.innerHTML = "";
+  for (const code of sorted) {
+    const option = document.createElement("option");
+    option.value = code;
+    const optionKey = `settings.language.option_${code}`;
+    option.textContent = (editor.i18nMap && editor.i18nMap[optionKey]) || code.toUpperCase();
+    el.settingsLanguage.appendChild(option);
+  }
+  el.settingsLanguage.value = sorted.includes(current) ? current : (sorted[0] || DEFAULT_UI_LANGUAGE);
+
+  if (el.uploadLanguageCode) {
+    el.uploadLanguageCode.value = el.settingsLanguage.value;
+  }
+}
+
+async function loadLanguageCatalog() {
+  const payload = await apiGet("/api/i18n/languages");
+  if (!payload || !Array.isArray(payload.languages)) {
+    throw new Error("Invalid language catalog");
+  }
+  editor.languageCatalog = payload.languages;
+  return payload;
+}
+
+async function loadEffectiveTranslation(language) {
+  const lang = normalizeUiLanguage(language);
+  const response = await fetch(`/api/i18n/effective?lang=${encodeURIComponent(lang)}`, { cache: "no-store" });
+  if (!response.ok) {
+    throw new Error(`${response.status} ${response.statusText}`);
+  }
+  return response.json();
+}
+
+async function loadI18nLanguage(language, refreshCatalog = false) {
+  const lang = normalizeUiLanguage(language);
+
+  if (refreshCatalog || !Array.isArray(editor.languageCatalog) || editor.languageCatalog.length === 0) {
+    try {
+      await loadLanguageCatalog();
+    } catch (_) {}
+  }
+
+  let effective = {};
+  try {
+    effective = await loadEffectiveTranslation(lang);
+  } catch (_) {
+    effective = {};
+  }
+
+  const builtin = WEB_I18N_BUILTIN[lang] || {};
+  const webCustom = flattenTranslationObject(effective?.web || {});
+  editor.i18nMap = {
+    ...(WEB_I18N_BUILTIN.en || {}),
+    ...builtin,
+    ...webCustom,
+  };
+  editor.i18nEffective = effective || {};
+  editor.i18nLanguage = lang;
+  document.documentElement.lang = lang;
+
+  applyWebTranslations();
+  renderLanguageOptions();
+}
+
+function applyWebTranslations() {
+  setTextById("layoutTabBtn", "tabs.layout");
+  setTextById("settingsTabBtn", "tabs.settings");
+  setTextById("sidebarTitle", "sidebar.title");
+  setTextById("sidebarSubtitle", "sidebar.subtitle");
+
+  setTextById("provWifiTitle", "provision.wifi.title");
+  setTextById("provWifiSubtitle", "provision.wifi.subtitle");
+  setTextById("provWifiSsidLabel", "provision.wifi.ssid");
+  setTextById("provWifiCountryCodeLabel", "provision.wifi.country_code");
+  setTextById("provWifiPasswordLabel", "provision.wifi.password");
+  setTextById("provWifiShowPasswordLabel", "provision.wifi.show_password");
+  setTextById("provScanWifiBtn", "common.scan");
+  setTextById("provHaTitle", "provision.ha.title");
+  setTextById("provHaSubtitle", "provision.ha.subtitle");
+  setTextById("provHaUrlLabel", "provision.ha.ws_url");
+  setTextById("provHaTokenLabel", "provision.ha.token");
+  setTextById("provHaShowTokenLabel", "provision.ha.show_token");
+  setTextById("provWifiSaveBtn", "common.save_reboot");
+  setTextById("provHaSaveBtn", "common.save_reboot");
+
+  setTextById("settingsWifiHeading", "settings.wifi.heading");
+  setTextById("settingsWifiSsidLabel", "settings.wifi.ssid");
+  setTextById("settingsWifiCountryCodeLabel", "settings.wifi.country_code");
+  setTextById("settingsWifiPasswordLabel", "settings.wifi.password");
+  setTextById("scanWifiBtn", "common.scan_wifi");
+
+  setTextById("settingsHaHeading", "settings.ha.heading");
+  setTextById("settingsHaUrlLabel", "settings.ha.ws_url");
+  setTextById("settingsHaTokenLabel", "settings.ha.token");
+  setTextById("settingsHaRestEnabledLabel", "settings.ha.rest_fallback");
+
+  setTextById("settingsTimeHeading", "settings.time.heading");
+  setTextById("settingsNtpServerLabel", "settings.time.ntp_server");
+  setTextById("settingsTimezoneLabel", "settings.time.timezone");
+
+  setTextById("settingsUiHeading", "settings.ui.heading");
+  setTextById("settingsLanguageLabel", "settings.ui.language");
+  setTextById("reloadLanguagesBtn", "settings.ui.reload_languages");
+  setTextById("downloadLanguageBtn", "settings.ui.download_json");
+  setTextById("uploadLanguageCodeLabel", "settings.ui.upload_code");
+  setTextById("uploadLanguageFileLabel", "settings.ui.upload_file");
+  setTextById("uploadLanguageBtn", "settings.ui.upload_button");
+
+  setTextById("settingsApHeading", "settings.ap.heading");
+  const apHint = document.getElementById("settingsApHint");
+  if (apHint) apHint.innerHTML = t("settings.ap.hint");
+
+  setTextById("settingsActionsHeading", "settings.actions.heading");
+  setTextById("reloadSettingsBtn", "settings.actions.reload");
+  setTextById("saveSettingsBtn", "settings.actions.save");
+  setTextById("settingsActionsHint", "settings.actions.hint");
+
+  if (el.settingsTranslationInfo && !el.settingsTranslationInfo.textContent) {
+    el.settingsTranslationInfo.textContent = t("settings.translation.info");
+  }
+
+  if (el.uploadLanguageCode) {
+    el.uploadLanguageCode.placeholder = "fr";
+  }
+}
+
+function downloadLanguageJson() {
+  const lang = normalizeUiLanguage(el.settingsLanguage?.value || editor.i18nLanguage);
+  const web = {};
+  for (const [key, value] of Object.entries(editor.i18nMap || {})) {
+    web[key] = value;
+  }
+
+  const payload = {
+    meta: {
+      code: lang,
+      exported_at: new Date().toISOString(),
+    },
+    web,
+    lvgl: editor.i18nEffective?.lvgl || {},
+  };
+
+  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `betaa-i18n-${lang}.json`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+async function uploadLanguageJson() {
+  const lang = normalizeLanguageCode(el.uploadLanguageCode?.value, "");
+  if (!lang) {
+    throw new Error(t("settings.translation.invalid_code"));
+  }
+  const file = el.uploadLanguageFile?.files?.[0];
+  if (!file) {
+    throw new Error(t("settings.translation.no_file"));
+  }
+
+  const text = await file.text();
+  let parsed = null;
+  try {
+    parsed = JSON.parse(text);
+  } catch (_) {
+    throw new Error("Invalid JSON");
+  }
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+    throw new Error("JSON must be an object");
+  }
+
+  const response = await fetch(`/api/i18n/custom?lang=${encodeURIComponent(lang)}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(parsed),
+  });
+  if (!response.ok) {
+    let detail = await response.text();
+    try {
+      const json = JSON.parse(detail);
+      detail = json.error || detail;
+    } catch (_) {}
+    throw new Error(detail);
+  }
+}
+
 function setProvisioningVisible(visible) {
   if (el.provisioningRoot) {
     el.provisioningRoot.classList.toggle("hidden", !visible);
@@ -412,16 +962,16 @@ function showProvisioningStage(stage, settings) {
   renderWifiScanResults(editor.wifiScanItems, "provisioning");
 
   if (!editor.wifiScanSupported) {
-    setWifiScanInfo("Wi-Fi scan is unavailable in setup AP mode on this hardware. Enter SSID manually.", false, "provisioning");
+    setWifiScanInfo(t("wifi.scan_unavailable"), false, "provisioning");
   } else if (!editor.wifiScanHasRun && !editor.wifiScanInProgress) {
-    setWifiScanInfo('Click "Scan" to list nearby networks.', false, "provisioning");
+    setWifiScanInfo(t("wifi.scan_click_short"), false, "provisioning");
   }
 
   setProvisioningInfo(
     stage,
     stage === "wifi"
-      ? "Save reboots the panel. After reboot, HA provisioning is shown."
-      : "Save reboots the panel. After reboot, the editor is unlocked."
+      ? t("provision.wifi.hint", {}, "Save reboots the panel. After reboot, HA provisioning is shown.")
+      : t("provision.ha.hint", {}, "Save reboots the panel. After reboot, the editor is unlocked.")
   );
   return true;
 }
@@ -466,6 +1016,7 @@ function renderSettings() {
   const wifi = settings.wifi || {};
   const ha = settings.ha || {};
   const time = settings.time || {};
+  const ui = settings.ui || {};
   const scanSupported = wifi.scan_supported !== false;
   editor.wifiScanSupported = scanSupported;
 
@@ -481,34 +1032,44 @@ function renderSettings() {
   }
   el.settingsNtpServer.value = time.ntp_server || "";
   el.settingsTimezone.value = time.timezone || "";
+  if (el.settingsLanguage) {
+    el.settingsLanguage.value = normalizeUiLanguage(ui.language);
+  }
+  renderLanguageOptions();
 
   el.settingsWifiInfo.textContent = [
-    `Configured: ${wifi.configured ? "yes" : "no"}`,
-    `Connected: ${wifi.connected ? "yes" : "no"}`,
-    `Password stored: ${wifi.password_set ? "yes" : "no"}`,
-    `Country: ${normalizeCountryCode(wifi.country_code) || "US"}`,
+    `${t("settings.info.configured")}: ${wifi.configured ? t("common.yes") : t("common.no")}`,
+    `${t("settings.info.connected")}: ${wifi.connected ? t("common.yes") : t("common.no")}`,
+    `${t("settings.info.password_stored")}: ${wifi.password_set ? t("common.yes") : t("common.no")}`,
+    `${t("settings.info.country")}: ${normalizeCountryCode(wifi.country_code) || "US"}`,
   ].join(" | ");
 
   el.settingsHaInfo.textContent = [
-    `Configured: ${ha.configured ? "yes" : "no"}`,
-    `Connected: ${ha.connected ? "yes" : "no"}`,
-    `Token stored: ${ha.access_token_set ? "yes" : "no"}`,
-    `REST fallback: ${ha.rest_enabled ? "on" : "off"}`,
+    `${t("settings.info.configured")}: ${ha.configured ? t("common.yes") : t("common.no")}`,
+    `${t("settings.info.connected")}: ${ha.connected ? t("common.yes") : t("common.no")}`,
+    `${t("settings.info.token_stored")}: ${ha.access_token_set ? t("common.yes") : t("common.no")}`,
+    `${t("settings.info.rest_fallback")}: ${ha.rest_enabled ? t("common.yes") : t("common.no")}`,
   ].join(" | ");
 
-  el.settingsTimeInfo.textContent = "Applied after reboot. Time sync starts when Wi-Fi is connected.";
+  el.settingsTimeInfo.textContent = t("settings.time.info");
+  if (el.settingsUiInfo) {
+    el.settingsUiInfo.textContent = t("settings.ui.info");
+  }
+  if (el.settingsTranslationInfo && !el.settingsTranslationInfo.textContent) {
+    el.settingsTranslationInfo.textContent = t("settings.translation.info");
+  }
 
   if (wifi.setup_ap_active) {
     const ssid = wifi.setup_ap_ssid || "(unknown)";
-    el.settingsApInfo.textContent = `Setup AP active: ${ssid}\nOpen http://192.168.4.1 while connected to this AP.`;
+    el.settingsApInfo.textContent = t("settings.ap.active", { ssid });
   } else {
-    el.settingsApInfo.textContent = "Setup AP inactive.\nUse the panel IP in your home Wi-Fi network.";
+    el.settingsApInfo.textContent = t("settings.ap.inactive");
   }
 
   if (!scanSupported) {
-    setWifiScanInfo("Wi-Fi scan is unavailable in setup AP mode on this hardware. Enter SSID manually.");
+    setWifiScanInfo(t("wifi.scan_unavailable"));
   } else if (!editor.wifiScanHasRun && !editor.wifiScanInProgress) {
-    setWifiScanInfo('Click "Scan Wi-Fi" to list nearby networks.');
+    setWifiScanInfo(t("wifi.scan_click"));
   }
   if (el.scanWifiBtn) {
     el.scanWifiBtn.disabled = !scanSupported || editor.wifiScanInProgress;
@@ -526,7 +1087,7 @@ function renderWifiScanResults(items, scope = "settings") {
   if (!editor.wifiScanSupported) {
     const option = document.createElement("option");
     option.value = "";
-    option.textContent = "Scan unavailable";
+    option.textContent = t("wifi.scan.option_unavailable", {}, "Scan unavailable");
     select.appendChild(option);
     return;
   }
@@ -534,7 +1095,7 @@ function renderWifiScanResults(items, scope = "settings") {
   if (editor.wifiScanInProgress) {
     const option = document.createElement("option");
     option.value = "";
-    option.textContent = "Scanning...";
+    option.textContent = t("wifi.scan.option_scanning", {}, "Scanning...");
     select.appendChild(option);
     return;
   }
@@ -542,7 +1103,7 @@ function renderWifiScanResults(items, scope = "settings") {
   if (!editor.wifiScanHasRun) {
     const option = document.createElement("option");
     option.value = "";
-    option.textContent = "No scan yet";
+    option.textContent = t("wifi.scan.option_not_run", {}, "No scan yet");
     select.appendChild(option);
     return;
   }
@@ -550,14 +1111,14 @@ function renderWifiScanResults(items, scope = "settings") {
   if (!Array.isArray(items) || items.length === 0) {
     const option = document.createElement("option");
     option.value = "";
-    option.textContent = "No networks found";
+    option.textContent = t("wifi.scan.option_no_networks", {}, "No networks found");
     select.appendChild(option);
     return;
   }
 
   const placeholder = document.createElement("option");
   placeholder.value = "";
-  placeholder.textContent = `Select network (${items.length} found)`;
+  placeholder.textContent = t("wifi.scan.option_select", { count: items.length }, `Select network (${items.length} found)`);
   select.appendChild(placeholder);
 
   for (const net of items) {
@@ -578,7 +1139,7 @@ async function scanWifiNetworks(scope = "settings") {
   if (!ui.scanButton) return;
   if (!editor.wifiScanSupported) {
     setWifiScanInfo(
-      "Wi-Fi scan is unavailable in setup AP mode on this hardware. Enter SSID manually.",
+      t("wifi.scan_unavailable"),
       false,
       scope
     );
@@ -589,8 +1150,8 @@ async function scanWifiNetworks(scope = "settings") {
   editor.wifiScanInProgress = true;
   ui.scanButton.disabled = true;
   renderWifiScanResults([], scope);
-  setWifiScanInfo("Scanning nearby networks (max 8s)...", false, scope);
-  setStatus("Scanning Wi-Fi networks...");
+  setWifiScanInfo(t("status.wifi_scan_running"), false, scope);
+  setStatus(t("status.wifi_scan_running"));
 
   const controller = new AbortController();
   const timeoutId = window.setTimeout(() => controller.abort(), 15000);
@@ -621,20 +1182,20 @@ async function scanWifiNetworks(scope = "settings") {
 
     if (editor.wifiScanItems.length > 0) {
       setWifiScanInfo(
-        `${editor.wifiScanItems.length} network(s) found. Select one to fill SSID.`,
+        t("wifi.scan_found", { count: editor.wifiScanItems.length }),
         false,
         scope
       );
     } else {
-      setWifiScanInfo("No networks found. Move closer to your router and scan again.", false, scope);
+      setWifiScanInfo(t("wifi.scan_no_networks"), false, scope);
     }
-    setStatus(`Wi-Fi scan complete (${editor.wifiScanItems.length} networks)`);
+    setStatus(t("status.wifi_scan_complete", { count: editor.wifiScanItems.length }));
   } catch (err) {
     editor.wifiScanHasRun = true;
     renderWifiScanResults(editor.wifiScanItems, scope);
     const detail = err?.name === "AbortError" ? "Wi-Fi scan request timed out" : (err?.message || "Unknown error");
     setWifiScanInfo(detail, true, scope);
-    setStatus(`Wi-Fi scan failed: ${detail}`, true);
+    setStatus(t("status.wifi_scan_failed", { error: detail }), true);
   } finally {
     window.clearTimeout(timeoutId);
     editor.wifiScanInProgress = false;
@@ -645,18 +1206,19 @@ async function scanWifiNetworks(scope = "settings") {
 
 async function loadSettings(silent = false) {
   if (!silent) {
-    setStatus("Loading settings...");
+    setStatus(t("status.loading_settings"));
   }
   try {
     editor.settings = await apiGet("/api/settings");
+    await loadI18nLanguage(editor.settings?.ui?.language || DEFAULT_UI_LANGUAGE, true);
     renderSettings();
     if (!silent) {
-      setStatus("Settings loaded");
+      setStatus(t("status.settings_loaded"));
     }
     return editor.settings;
   } catch (err) {
     if (!silent) {
-      setStatus(`Settings load failed: ${err.message}`, true);
+      setStatus(t("status.settings_load_failed", { error: err.message }), true);
     }
     return null;
   }
@@ -684,11 +1246,11 @@ async function saveWifiProvisioning() {
   const countryCode = normalizeCountryCode(el.provWifiCountryCode?.value) || "";
 
   if (!ssid) {
-    setProvisioningInfo("wifi", "SSID ist erforderlich.", true);
+    setProvisioningInfo("wifi", t("provision.wifi.required_ssid"), true);
     return;
   }
   if (!countryCode) {
-    setProvisioningInfo("wifi", "Country Code muss 2 Buchstaben haben (z.B. US, DE).", true);
+    setProvisioningInfo("wifi", t("provision.wifi.required_country"), true);
     return;
   }
 
@@ -703,9 +1265,9 @@ async function saveWifiProvisioning() {
     payload.wifi.password = password;
   }
 
-  setProvisioningInfo("wifi", "Saving settings and rebooting...");
+  setProvisioningInfo("wifi", t("provision.saving_reboot"));
   await putSettings(payload);
-  setProvisioningInfo("wifi", "Settings saved. Device reboots in ~2s.");
+  setProvisioningInfo("wifi", t("provision.saved_reboot"));
 }
 
 async function saveHaProvisioning() {
@@ -713,15 +1275,15 @@ async function saveHaProvisioning() {
   const accessToken = el.provHaToken?.value.trim() || "";
 
   if (!wsUrl) {
-    setProvisioningInfo("ha", "WebSocket URL ist erforderlich.", true);
+    setProvisioningInfo("ha", t("provision.ha.required_url"), true);
     return;
   }
   if (!wsUrl.startsWith("ws://") && !wsUrl.startsWith("wss://")) {
-    setProvisioningInfo("ha", "HA URL muss mit ws:// oder wss:// beginnen.", true);
+    setProvisioningInfo("ha", t("provision.ha.invalid_url"), true);
     return;
   }
   if (!accessToken) {
-    setProvisioningInfo("ha", "Long-lived Access Token ist erforderlich.", true);
+    setProvisioningInfo("ha", t("provision.ha.required_token"), true);
     return;
   }
 
@@ -733,9 +1295,9 @@ async function saveHaProvisioning() {
     reboot: true,
   };
 
-  setProvisioningInfo("ha", "Saving settings and rebooting...");
+  setProvisioningInfo("ha", t("provision.saving_reboot"));
   await putSettings(payload);
-  setProvisioningInfo("ha", "Settings saved. Device reboots in ~2s.");
+  setProvisioningInfo("ha", t("provision.saved_reboot"));
 }
 
 async function saveSettings() {
@@ -747,13 +1309,14 @@ async function saveSettings() {
   const haRestEnabled = Boolean(el.settingsHaRestEnabled?.checked);
   const ntpServer = el.settingsNtpServer.value.trim();
   const timezone = el.settingsTimezone.value.trim();
+  const language = normalizeUiLanguage(el.settingsLanguage?.value);
 
   if (!wifiCountryCode) {
-    setStatus("Wi-Fi country code must be a 2-letter ISO code (e.g. US, DE)", true);
+    setStatus(t("settings.language.invalid_country"), true);
     return;
   }
   if (haUrl && !haUrl.startsWith("ws://") && !haUrl.startsWith("wss://")) {
-    setStatus("HA URL must start with ws:// or wss://", true);
+    setStatus(t("settings.language.invalid_ha_url"), true);
     return;
   }
 
@@ -770,6 +1333,9 @@ async function saveSettings() {
       ntp_server: ntpServer,
       timezone,
     },
+    ui: {
+      language,
+    },
     reboot: true,
   };
   if (wifiPassword.length > 0) {
@@ -779,9 +1345,9 @@ async function saveSettings() {
     payload.ha.access_token = haToken;
   }
 
-  setStatus("Saving settings...");
+  setStatus(t("status.saving_settings"));
   await putSettings(payload);
-  setStatus("Settings saved. Device reboots in ~2s. Reconnect and reopen the panel URL.");
+  setStatus(t("status.settings_saved_reboot"));
 }
 
 function defaultLayout() {
@@ -1691,7 +2257,7 @@ function exportLayout() {
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
-  a.download = "smart86-layout.json";
+  a.download = "betaa-layout.json";
   a.click();
   URL.revokeObjectURL(url);
 }
@@ -1868,6 +2434,73 @@ function bindUi() {
       el.settingsWifiCountryCode.value = cleaned;
     };
   }
+  if (el.uploadLanguageCode) {
+    el.uploadLanguageCode.oninput = () => {
+      const cleaned = (el.uploadLanguageCode.value || "")
+        .toLowerCase()
+        .replace(/[^a-z0-9_-]/g, "")
+        .slice(0, 15);
+      el.uploadLanguageCode.value = cleaned;
+    };
+  }
+  if (el.settingsLanguage) {
+    el.settingsLanguage.onchange = async () => {
+      const lang = normalizeUiLanguage(el.settingsLanguage.value);
+      await loadI18nLanguage(lang);
+      if (el.uploadLanguageCode) {
+        el.uploadLanguageCode.value = lang;
+      }
+      renderSettings();
+    };
+  }
+  if (el.reloadLanguagesBtn) {
+    el.reloadLanguagesBtn.onclick = async () => {
+      try {
+        await loadLanguageCatalog();
+        renderLanguageOptions();
+        if (el.settingsTranslationInfo) {
+          el.settingsTranslationInfo.textContent = t("settings.translation.info");
+        }
+      } catch (err) {
+        if (el.settingsTranslationInfo) {
+          el.settingsTranslationInfo.textContent = t("settings.translation.upload_fail", { error: err.message });
+          el.settingsTranslationInfo.classList.add("error");
+        }
+      }
+    };
+  }
+  if (el.downloadLanguageBtn) {
+    el.downloadLanguageBtn.onclick = async () => {
+      const lang = normalizeUiLanguage(el.settingsLanguage?.value || editor.i18nLanguage);
+      await loadI18nLanguage(lang);
+      downloadLanguageJson();
+    };
+  }
+  if (el.uploadLanguageBtn) {
+    el.uploadLanguageBtn.onclick = async () => {
+      if (el.settingsTranslationInfo) {
+        el.settingsTranslationInfo.classList.remove("error");
+      }
+      try {
+        const targetLang = normalizeLanguageCode(el.uploadLanguageCode?.value, "");
+        await uploadLanguageJson();
+        if (el.settingsTranslationInfo) {
+          el.settingsTranslationInfo.textContent = t("settings.translation.upload_ok", { lang: targetLang });
+          el.settingsTranslationInfo.classList.remove("error");
+        }
+        if (el.uploadLanguageFile) {
+          el.uploadLanguageFile.value = "";
+        }
+        await loadI18nLanguage(targetLang || editor.i18nLanguage, true);
+        renderSettings();
+      } catch (err) {
+        if (el.settingsTranslationInfo) {
+          el.settingsTranslationInfo.textContent = t("settings.translation.upload_fail", { error: err.message });
+          el.settingsTranslationInfo.classList.add("error");
+        }
+      }
+    };
+  }
   if (el.provScanWifiBtn) {
     el.provScanWifiBtn.onclick = () => scanWifiNetworks("provisioning");
   }
@@ -1963,6 +2596,7 @@ async function startEditor() {
 
 async function bootstrap() {
   bindUi();
+  setStatus(t("status.idle"));
   const settings = await loadSettings(true);
   const stage = provisioningStageForSettings(settings);
   if (stage) {

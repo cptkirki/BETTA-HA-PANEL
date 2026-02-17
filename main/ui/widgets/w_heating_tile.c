@@ -8,6 +8,7 @@
 #include "cJSON.h"
 
 #include "ui/ui_bindings.h"
+#include "ui/ui_i18n.h"
 #include "ui/theme/theme_default.h"
 
 #if LV_FONT_MONTSERRAT_34
@@ -215,7 +216,7 @@ static void heating_set_target_label(lv_obj_t *label, float value)
         return;
     }
     char text[20] = {0};
-    snprintf(text, sizeof(text), "Soll %.1f C", (double)clamp_temp(value));
+    snprintf(text, sizeof(text), ui_i18n_get("heating.target_format", "Target %.1f C"), (double)clamp_temp(value));
     lv_label_set_text(label, text);
 }
 
@@ -258,11 +259,22 @@ static void heating_set_status_label(lv_obj_t *label, bool is_on, const char *st
             text[out++] = c;
         }
         text[out] = '\0';
-        lv_label_set_text(label, text);
+        if (strcmp(text, "on") == 0) {
+            lv_label_set_text(label, ui_i18n_get("common.on", "ON"));
+        } else if (strcmp(text, "off") == 0) {
+            lv_label_set_text(label, ui_i18n_get("common.off", "OFF"));
+        } else if (strcmp(text, "unavailable") == 0) {
+            lv_label_set_text(label, ui_i18n_get("common.unavailable", "unavailable"));
+        } else if (strcmp(text, "heating") == 0) {
+            lv_label_set_text(label, ui_i18n_get("heating.active", "heating active"));
+        } else {
+            lv_label_set_text(label, text);
+        }
         return;
     }
 
-    lv_label_set_text(label, is_on ? "heating active" : "off");
+    lv_label_set_text(
+        label, is_on ? ui_i18n_get("heating.active", "heating active") : ui_i18n_get("common.off", "OFF"));
 }
 
 static void heating_apply_layout(lv_obj_t *card, w_heating_tile_ctx_t *ctx)
@@ -494,7 +506,7 @@ esp_err_t w_heating_tile_create(const ui_widget_def_t *def, lv_obj_t *parent, ui
     lv_obj_clear_flag(arc, LV_OBJ_FLAG_EVENT_BUBBLE);
 
     lv_obj_t *target_label = lv_label_create(card);
-    lv_label_set_text(target_label, "Soll 20.0 C");
+    heating_set_target_label(target_label, 20.0f);
     lv_obj_set_style_text_font(target_label, HEATING_TARGET_FONT, LV_PART_MAIN);
 #if APP_UI_TILE_LAYOUT_TUNED
     lv_obj_align(target_label, LV_ALIGN_CENTER, 0, 8);
@@ -512,7 +524,7 @@ esp_err_t w_heating_tile_create(const ui_widget_def_t *def, lv_obj_t *parent, ui
 #endif
 
     lv_obj_t *status_label = lv_label_create(card);
-    lv_label_set_text(status_label, "off");
+    lv_label_set_text(status_label, ui_i18n_get("common.off", "OFF"));
     lv_obj_set_style_text_font(status_label, LV_FONT_DEFAULT, LV_PART_MAIN);
     lv_obj_set_style_text_align(status_label, LV_TEXT_ALIGN_CENTER, LV_PART_MAIN);
     lv_obj_align(status_label, LV_ALIGN_BOTTOM_MID, 0, -12);

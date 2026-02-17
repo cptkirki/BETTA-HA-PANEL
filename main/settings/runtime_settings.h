@@ -15,6 +15,7 @@ typedef struct {
     bool ha_rest_enabled;
     char ntp_server[APP_NTP_SERVER_MAX_LEN];
     char time_tz[APP_TIME_TZ_MAX_LEN];
+    char ui_language[APP_UI_LANGUAGE_MAX_LEN];
 } runtime_settings_t;
 
 void runtime_settings_set_defaults(runtime_settings_t *out);

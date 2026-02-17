@@ -21,6 +21,7 @@
 #include "net/wifi_mgr.h"
 #include "settings/runtime_settings.h"
 #include "ui/ui_boot_splash.h"
+#include "ui/ui_i18n.h"
 #include "ui/ui_runtime.h"
 #include "util/log_tags.h"
 
@@ -50,16 +51,18 @@ static void app_show_wifi_setup_screen(bool had_wifi_credentials)
 
     char ssid_line[64] = {0};
     char url_line[64] = {0};
-    snprintf(ssid_line, sizeof(ssid_line), "AP: %s", ap_ssid);
+    snprintf(ssid_line, sizeof(ssid_line), "%s: %s", ui_i18n_get("topbar.ap", "AP"), ap_ssid);
     snprintf(url_line, sizeof(url_line), "http://%s", ap_ip);
 
-    ui_boot_splash_set_title("Wi-Fi Setup");
+    ui_boot_splash_set_title(ui_i18n_get("boot.wifi_setup_title", "Wi-Fi Setup"));
     ui_boot_splash_set_status_layout(true, 520, 0);
     ui_boot_splash_clear_status();
     ui_boot_splash_set_progress(100);
-    ui_boot_splash_set_status(had_wifi_credentials ? "Wi-Fi connect failed" : "Wi-Fi credentials missing");
+    ui_boot_splash_set_status(
+        had_wifi_credentials ? ui_i18n_get("boot.wifi_connect_failed", "Wi-Fi connect failed")
+                             : ui_i18n_get("boot.wifi_credentials_missing", "Wi-Fi credentials missing"));
     ui_boot_splash_set_status(ssid_line);
-    ui_boot_splash_set_status("Open Smart86 Editor:");
+    ui_boot_splash_set_status(ui_i18n_get("boot.open_editor", "Open BETTA Editor:"));
     ui_boot_splash_set_status(url_line);
 }
 
@@ -73,15 +76,15 @@ static void app_show_ha_setup_screen(void)
         snprintf(url_line, sizeof(url_line), "http://<panel-ip>");
     }
 
-    ui_boot_splash_set_title("Home Assistant Setup");
+    ui_boot_splash_set_title(ui_i18n_get("boot.ha_setup_title", "Home Assistant Setup"));
     ui_boot_splash_set_status_layout(true, 520, 0);
     ui_boot_splash_clear_status();
     ui_boot_splash_set_progress(100);
-    ui_boot_splash_set_status("Wi-Fi connected");
-    ui_boot_splash_set_status("HA credentials missing");
-    ui_boot_splash_set_status("Open Smart86 Editor:");
+    ui_boot_splash_set_status(ui_i18n_get("boot.wifi_connected", "Wi-Fi connected"));
+    ui_boot_splash_set_status(ui_i18n_get("boot.ha_credentials_missing", "HA credentials missing"));
+    ui_boot_splash_set_status(ui_i18n_get("boot.open_editor", "Open BETTA Editor:"));
     ui_boot_splash_set_status(url_line);
-    ui_boot_splash_set_status("Set HA URL and token");
+    ui_boot_splash_set_status(ui_i18n_get("boot.set_ha_url_token", "Set HA URL and token"));
 }
 
 static esp_err_t init_nvs(void)
@@ -135,11 +138,12 @@ void app_main(void)
         ESP_LOGW(TAG_APP, "Failed to load runtime settings (%s), continuing with defaults", esp_err_to_name(settings_err));
         runtime_settings_set_defaults(&s_runtime_settings);
     }
+    (void)ui_i18n_init(s_runtime_settings.ui_language);
     (void)time_sync_set_timezone(s_runtime_settings.time_tz);
     ESP_ERROR_CHECK(display_init());
     (void)ui_boot_splash_show();
 
-    ui_boot_splash_set_status("Initializing Wi-Fi");
+    ui_boot_splash_set_status(ui_i18n_get("boot.initializing_wifi", "Initializing Wi-Fi"));
 
     bool has_wifi_credentials = false;
     bool wifi_ready = false;
@@ -158,12 +162,12 @@ void app_main(void)
         esp_err_t wifi_err = wifi_mgr_init(&wifi_cfg);
         if (wifi_err != ESP_OK) {
             ESP_LOGW(TAG_WIFI, "Wi-Fi init failed: %s", esp_err_to_name(wifi_err));
-            ui_boot_splash_set_status("Wi-Fi connect failed");
+            ui_boot_splash_set_status(ui_i18n_get("boot.wifi_connect_failed", "Wi-Fi connect failed"));
         } else {
             wifi_ready = true;
             time_sync_start(s_runtime_settings.ntp_server);
             time_sync_wait_for_sync(8000);
-            ui_boot_splash_set_status("Wi-Fi connected");
+            ui_boot_splash_set_status(ui_i18n_get("boot.wifi_connected", "Wi-Fi connected"));
         }
     } else {
         ESP_LOGW(TAG_WIFI, "No Wi-Fi credentials configured, starting setup AP");
@@ -180,12 +184,17 @@ void app_main(void)
         esp_err_t ap_err = wifi_mgr_start_setup_ap(&ap_cfg);
         if (ap_err == ESP_OK) {
             char ap_status[64] = {0};
-            snprintf(ap_status, sizeof(ap_status), "Setup AP: %s", wifi_mgr_get_setup_ap_ssid());
+            snprintf(
+                ap_status,
+                sizeof(ap_status),
+                "%s: %s",
+                ui_i18n_get("boot.setup_ap_prefix", "Setup AP"),
+                wifi_mgr_get_setup_ap_ssid());
             ui_boot_splash_set_status(ap_status);
             ESP_LOGW(TAG_WIFI, "Setup AP started: %s", wifi_mgr_get_setup_ap_ssid());
         } else {
             ESP_LOGW(TAG_WIFI, "Failed to start setup AP: %s", esp_err_to_name(ap_err));
-            ui_boot_splash_set_status("Offline mode");
+            ui_boot_splash_set_status(ui_i18n_get("boot.offline_mode", "Offline mode"));
         }
     }
 #else
@@ -204,13 +213,13 @@ void app_main(void)
     ESP_ERROR_CHECK(http_server_start());
 
     if (boot_screen_mode == BOOT_SCREEN_DASHBOARD) {
-        ui_boot_splash_set_status("Initializing touch");
+        ui_boot_splash_set_status(ui_i18n_get("boot.initializing_touch", "Initializing touch"));
         esp_err_t touch_err = touch_init();
         if (touch_err != ESP_OK) {
             ESP_LOGW(TAG_TOUCH, "Touch init failed, continuing without touch input: %s", esp_err_to_name(touch_err));
         }
 
-        ui_boot_splash_set_status("Loading dashboard");
+        ui_boot_splash_set_status(ui_i18n_get("boot.loading_dashboard", "Loading dashboard"));
         ESP_ERROR_CHECK(ui_runtime_init());
         ESP_ERROR_CHECK(ui_runtime_reload_layout());
         ESP_ERROR_CHECK(ui_runtime_start());

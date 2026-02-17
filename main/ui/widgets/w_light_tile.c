@@ -12,6 +12,7 @@
 
 #include "ui/ui_bindings.h"
 #include "ui/fonts/mdi_font_registry.h"
+#include "ui/ui_i18n.h"
 #include "ui/theme/theme_default.h"
 
 typedef struct {
@@ -62,6 +63,23 @@ static bool light_state_is_on(const char *state)
         return false;
     }
     return strcmp(state, "on") == 0;
+}
+
+static const char *light_translate_status(const char *status_text)
+{
+    if (status_text == NULL || status_text[0] == '\0') {
+        return ui_i18n_get("common.off", "OFF");
+    }
+    if (strcmp(status_text, "ON") == 0 || strcmp(status_text, "on") == 0) {
+        return ui_i18n_get("common.on", "ON");
+    }
+    if (strcmp(status_text, "OFF") == 0 || strcmp(status_text, "off") == 0) {
+        return ui_i18n_get("common.off", "OFF");
+    }
+    if (strcmp(status_text, "unavailable") == 0) {
+        return ui_i18n_get("common.unavailable", "unavailable");
+    }
+    return status_text;
 }
 
 static void light_set_value_label(lv_obj_t *label, int value)
@@ -226,7 +244,7 @@ static void light_apply_visual(lv_obj_t *card, bool is_on, int brightness, const
     lv_slider_set_value(slider, clamp_percent(brightness), LV_ANIM_OFF);
     light_set_value_label(value_label, brightness);
     lv_label_set_text(icon, light_icon_text());
-    lv_label_set_text(state_label, status_text != NULL ? status_text : (is_on ? "ON" : "OFF"));
+    lv_label_set_text(state_label, light_translate_status(status_text != NULL ? status_text : (is_on ? "ON" : "OFF")));
     light_position_icon_between_state_and_title(card);
 }
 
@@ -364,7 +382,7 @@ esp_err_t w_light_tile_create(const ui_widget_def_t *def, lv_obj_t *parent, ui_w
 #endif
 
     lv_obj_t *state_label = lv_label_create(card);
-    lv_label_set_text(state_label, "OFF");
+    lv_label_set_text(state_label, ui_i18n_get("common.off", "OFF"));
     lv_obj_set_style_text_font(state_label, LV_FONT_DEFAULT, LV_PART_MAIN);
 #if APP_UI_TILE_LAYOUT_TUNED
     lv_obj_align(state_label, LV_ALIGN_TOP_LEFT, 0, 2);

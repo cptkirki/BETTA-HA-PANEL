@@ -8,6 +8,7 @@
 #include "cJSON.h"
 #include "esp_timer.h"
 
+#include "ui/ui_i18n.h"
 #include "ui/theme/theme_default.h"
 
 #if LV_FONT_MONTSERRAT_24
@@ -140,19 +141,19 @@ static void sensor_update_age_label(w_sensor_ctx_t *ctx)
 
     char text[32] = {0};
     if (age_min <= 0) {
-        snprintf(text, sizeof(text), "just now");
+        snprintf(text, sizeof(text), "%s", ui_i18n_get("sensor.age.just_now", "just now"));
     } else if (age_min == 1) {
-        snprintf(text, sizeof(text), "1 min ago");
+        snprintf(text, sizeof(text), "%s", ui_i18n_get("sensor.age.min_one", "1 min ago"));
     } else if (age_min < 60) {
-        snprintf(text, sizeof(text), "%ld min ago", (long)age_min);
+        snprintf(text, sizeof(text), ui_i18n_get("sensor.age.min_many", "%d min ago"), (int)age_min);
     } else if (age_hour == 1) {
-        snprintf(text, sizeof(text), "1 hour ago");
+        snprintf(text, sizeof(text), "%s", ui_i18n_get("sensor.age.hour_one", "1 hour ago"));
     } else if (age_hour < 48) {
-        snprintf(text, sizeof(text), "%ld hours ago", (long)age_hour);
+        snprintf(text, sizeof(text), ui_i18n_get("sensor.age.hour_many", "%d hours ago"), (int)age_hour);
     } else if (age_day == 1) {
-        snprintf(text, sizeof(text), "1 day ago");
+        snprintf(text, sizeof(text), "%s", ui_i18n_get("sensor.age.day_one", "1 day ago"));
     } else {
-        snprintf(text, sizeof(text), "%ld days ago", (long)age_day);
+        snprintf(text, sizeof(text), ui_i18n_get("sensor.age.day_many", "%d days ago"), (int)age_day);
     }
 
     lv_label_set_text(ctx->age_label, text);
@@ -228,7 +229,7 @@ static void sensor_apply_unavailable(w_sensor_ctx_t *ctx)
     ctx->unavailable = true;
     ctx->has_timestamp = false;
     ctx->last_update_ms = 0;
-    sensor_set_value_text(ctx, "unavailable");
+    sensor_set_value_text(ctx, ui_i18n_get("common.unavailable", "unavailable"));
     sensor_update_age_label(ctx);
     sensor_apply_layout(ctx);
 }
@@ -297,7 +298,7 @@ esp_err_t w_sensor_create(const ui_widget_def_t *def, lv_obj_t *parent, ui_widge
     lv_obj_set_style_text_font(value, SENSOR_VALUE_FONT_MEDIUM, LV_PART_MAIN);
 
     lv_obj_t *age = lv_label_create(card);
-    lv_label_set_text(age, "just now");
+    lv_label_set_text(age, ui_i18n_get("sensor.age.just_now", "just now"));
     lv_obj_set_style_text_color(age, theme_default_color_text_muted(), LV_PART_MAIN);
     lv_obj_set_style_text_font(age, SENSOR_META_FONT, LV_PART_MAIN);
     lv_obj_add_flag(age, LV_OBJ_FLAG_HIDDEN);

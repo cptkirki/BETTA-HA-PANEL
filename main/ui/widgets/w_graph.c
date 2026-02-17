@@ -11,6 +11,7 @@
 
 #include "cJSON.h"
 
+#include "ui/ui_i18n.h"
 #include "ui/theme/theme_default.h"
 
 #define GRAPH_POINTS_MIN 16
@@ -543,7 +544,7 @@ static void graph_rebuild_chart(w_graph_ctx_t *ctx)
     if (now_bucket == 0U || ctx->history_count <= 0) {
         lv_obj_add_flag(ctx->chart, LV_OBJ_FLAG_HIDDEN);
         char meta_text[64] = {0};
-        snprintf(meta_text, sizeof(meta_text), "no history | %s", window_text);
+        snprintf(meta_text, sizeof(meta_text), "%s | %s", ui_i18n_get("graph.no_history", "no history"), window_text);
         lv_label_set_text(ctx->meta_label, meta_text);
         return;
     }
@@ -609,9 +610,15 @@ static void graph_rebuild_chart(w_graph_ctx_t *ctx)
         lv_obj_add_flag(ctx->chart, LV_OBJ_FLAG_HIDDEN);
         char meta_text[64] = {0};
         if (ctx->history_offset_min > 0) {
-            snprintf(meta_text, sizeof(meta_text), "no data | %s @-%s", window_text, offset_text);
+            snprintf(
+                meta_text,
+                sizeof(meta_text),
+                "%s | %s @-%s",
+                ui_i18n_get("graph.no_data", "no data"),
+                window_text,
+                offset_text);
         } else {
-            snprintf(meta_text, sizeof(meta_text), "no data | %s", window_text);
+            snprintf(meta_text, sizeof(meta_text), "%s | %s", ui_i18n_get("graph.no_data", "no data"), window_text);
         }
         lv_label_set_text(ctx->meta_label, meta_text);
         return;
@@ -634,10 +641,21 @@ static void graph_rebuild_chart(w_graph_ctx_t *ctx)
     char meta_text[96] = {0};
     graph_format_value(min_text, sizeof(min_text), min_v, ctx->unit);
     graph_format_value(max_text, sizeof(max_text), max_v, ctx->unit);
+    const char *min_label = ui_i18n_get("graph.min", "min");
+    const char *max_label = ui_i18n_get("graph.max", "max");
     if (ctx->history_offset_min > 0) {
-        snprintf(meta_text, sizeof(meta_text), "min %s   max %s | %s @-%s", min_text, max_text, window_text, offset_text);
+        snprintf(
+            meta_text,
+            sizeof(meta_text),
+            "%s %s   %s %s | %s @-%s",
+            min_label,
+            min_text,
+            max_label,
+            max_text,
+            window_text,
+            offset_text);
     } else {
-        snprintf(meta_text, sizeof(meta_text), "min %s   max %s | %s", min_text, max_text, window_text);
+        snprintf(meta_text, sizeof(meta_text), "%s %s   %s %s | %s", min_label, min_text, max_label, max_text, window_text);
     }
     lv_label_set_text(ctx->meta_label, meta_text);
 }
@@ -714,7 +732,7 @@ static void graph_apply_unavailable(w_graph_ctx_t *ctx)
     }
 
     ctx->unavailable = true;
-    lv_label_set_text(ctx->value_label, "unavailable");
+    lv_label_set_text(ctx->value_label, ui_i18n_get("common.unavailable", "unavailable"));
     graph_rebuild_chart(ctx);
 }
 
