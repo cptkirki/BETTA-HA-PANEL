@@ -76,7 +76,7 @@ static bool is_supported_widget_type(const char *type)
         return false;
     }
     return (strcmp(type, "sensor") == 0) || (strcmp(type, "button") == 0) || (strcmp(type, "slider") == 0) ||
-           (strcmp(type, "graph") == 0) || (strcmp(type, "light_tile") == 0) ||
+           (strcmp(type, "graph") == 0) || (strcmp(type, "empty_tile") == 0) || (strcmp(type, "light_tile") == 0) ||
            (strcmp(type, "heating_tile") == 0) || (strcmp(type, "weather_tile") == 0) ||
            (strcmp(type, "weather_3day") == 0);
 }
@@ -105,8 +105,8 @@ static widget_size_limits_t widget_size_limits_for_type(const char *type)
         limits.min_w = 120;
         limits.min_h = 80;
     } else if (strcmp(type, "button") == 0) {
-        limits.min_w = 180;
-        limits.min_h = 120;
+        limits.min_w = 100;
+        limits.min_h = 100;
         limits.max_w = 480;
         limits.max_h = 320;
     } else if (strcmp(type, "slider") == 0) {
@@ -115,6 +115,9 @@ static widget_size_limits_t widget_size_limits_for_type(const char *type)
     } else if (strcmp(type, "graph") == 0) {
         limits.min_w = 220;
         limits.min_h = 140;
+    } else if (strcmp(type, "empty_tile") == 0) {
+        limits.min_w = 120;
+        limits.min_h = 80;
     } else if (strcmp(type, "light_tile") == 0) {
         limits.min_w = 200;
         limits.min_h = 180;
@@ -175,12 +178,23 @@ static bool widget_entity_domain_valid(const char *type, const char *entity_id)
     if (strcmp(type, "sensor") == 0) {
         return entity_in_domain(entity_id, "sensor") || entity_in_domain(entity_id, "binary_sensor");
     }
+    if (strcmp(type, "button") == 0) {
+        return entity_in_domain(entity_id, "switch") || entity_in_domain(entity_id, "media_player");
+    }
+    if (strcmp(type, "empty_tile") == 0) {
+        return true;
+    }
 
     const char *required_domain = required_domain_for_widget_type(type);
     if (required_domain == NULL) {
         return true;
     }
     return entity_in_domain(entity_id, required_domain);
+}
+
+static bool widget_requires_primary_entity(const char *type)
+{
+    return type == NULL || strcmp(type, "empty_tile") != 0;
 }
 
 static bool is_hex_digit_char(char c)
@@ -223,6 +237,24 @@ static bool is_valid_slider_direction(const char *direction)
            strcmp(direction, "top_to_bottom") == 0;
 }
 
+static bool is_valid_button_mode(const char *mode)
+{
+    if (mode == NULL || mode[0] == '\0') {
+        return false;
+    }
+    return strcmp(mode, "auto") == 0 || strcmp(mode, "play_pause") == 0 || strcmp(mode, "stop") == 0 ||
+           strcmp(mode, "next") == 0 || strcmp(mode, "previous") == 0;
+}
+
+static bool button_mode_requires_media_player(const char *mode)
+{
+    if (mode == NULL || mode[0] == '\0') {
+        return false;
+    }
+    return strcmp(mode, "play_pause") == 0 || strcmp(mode, "stop") == 0 || strcmp(mode, "next") == 0 ||
+           strcmp(mode, "previous") == 0;
+}
+
 void layout_validation_clear(layout_validation_result_t *result)
 {
     if (result == NULL) {
@@ -256,6 +288,7 @@ static bool validate_widget(cJSON *widget, const char *known_widget_ids, size_t 
     cJSON *slider_direction = cJSON_GetObjectItemCaseSensitive(widget, "slider_direction");
     cJSON *slider_accent_color = cJSON_GetObjectItemCaseSensitive(widget, "slider_accent_color");
     cJSON *button_accent_color = cJSON_GetObjectItemCaseSensitive(widget, "button_accent_color");
+    cJSON *button_mode = cJSON_GetObjectItemCaseSensitive(widget, "button_mode");
     cJSON *graph_line_color = cJSON_GetObjectItemCaseSensitive(widget, "graph_line_color");
     cJSON *graph_point_count = cJSON_GetObjectItemCaseSensitive(widget, "graph_point_count");
     cJSON *graph_time_window_min = cJSON_GetObjectItemCaseSensitive(widget, "graph_time_window_min");
@@ -281,23 +314,37 @@ static bool validate_widget(cJSON *widget, const char *known_widget_ids, size_t 
         layout_validation_add(result, msg);
     }
 
-    if (!cJSON_IsString(entity_id) || !is_valid_entity_id(entity_id->valuestring)) {
-        snprintf(msg, sizeof(msg), "widget %s: invalid entity_id", cJSON_IsString(id) ? id->valuestring : "?");
-        layout_validation_add(result, msg);
+    bool requires_entity = true;
+    if (cJSON_IsString(type) && type->valuestring != NULL) {
+        requires_entity = widget_requires_primary_entity(type->valuestring);
     }
 
-    if (cJSON_IsString(type) && type->valuestring != NULL && cJSON_IsString(entity_id) && entity_id->valuestring != NULL) {
-        if (!widget_entity_domain_valid(type->valuestring, entity_id->valuestring)) {
-            if (strcmp(type->valuestring, "sensor") == 0) {
-                snprintf(msg, sizeof(msg), "widget %s: entity_id must be sensor.* or binary_sensor.*",
-                    cJSON_IsString(id) ? id->valuestring : "?");
-            } else {
-                const char *required_domain = required_domain_for_widget_type(type->valuestring);
-                snprintf(msg, sizeof(msg), "widget %s: entity_id must be %s.*",
-                    cJSON_IsString(id) ? id->valuestring : "?", required_domain != NULL ? required_domain : "?");
-            }
+    if (requires_entity) {
+        if (!cJSON_IsString(entity_id) || !is_valid_entity_id(entity_id->valuestring)) {
+            snprintf(msg, sizeof(msg), "widget %s: invalid entity_id", cJSON_IsString(id) ? id->valuestring : "?");
             layout_validation_add(result, msg);
         }
+
+        if (cJSON_IsString(type) && type->valuestring != NULL && cJSON_IsString(entity_id) && entity_id->valuestring != NULL) {
+            if (!widget_entity_domain_valid(type->valuestring, entity_id->valuestring)) {
+                if (strcmp(type->valuestring, "sensor") == 0) {
+                    snprintf(msg, sizeof(msg), "widget %s: entity_id must be sensor.* or binary_sensor.*",
+                        cJSON_IsString(id) ? id->valuestring : "?");
+                } else if (strcmp(type->valuestring, "button") == 0) {
+                    snprintf(msg, sizeof(msg), "widget %s: entity_id must be switch.* or media_player.*",
+                        cJSON_IsString(id) ? id->valuestring : "?");
+                } else {
+                    const char *required_domain = required_domain_for_widget_type(type->valuestring);
+                    snprintf(msg, sizeof(msg), "widget %s: entity_id must be %s.*",
+                        cJSON_IsString(id) ? id->valuestring : "?", required_domain != NULL ? required_domain : "?");
+                }
+                layout_validation_add(result, msg);
+            }
+        }
+    } else if (cJSON_IsString(entity_id) && entity_id->valuestring != NULL && entity_id->valuestring[0] != '\0' &&
+               !is_valid_entity_id(entity_id->valuestring)) {
+        snprintf(msg, sizeof(msg), "widget %s: invalid entity_id", cJSON_IsString(id) ? id->valuestring : "?");
+        layout_validation_add(result, msg);
     }
 
     if (cJSON_IsString(type) && type->valuestring != NULL && strcmp(type->valuestring, "heating_tile") == 0) {
@@ -338,6 +385,22 @@ static bool validate_widget(cJSON *widget, const char *known_widget_ids, size_t 
                 !is_valid_hex_rgb_color(button_accent_color->valuestring)) {
                 snprintf(msg, sizeof(msg), "widget %s: button_accent_color must be hex RGB",
                     cJSON_IsString(id) ? id->valuestring : "?");
+                layout_validation_add(result, msg);
+            }
+        }
+
+        if (button_mode != NULL) {
+            if (!cJSON_IsString(button_mode) || button_mode->valuestring == NULL ||
+                !is_valid_button_mode(button_mode->valuestring)) {
+                snprintf(msg, sizeof(msg), "widget %s: button_mode must be auto|play_pause|stop|next|previous",
+                    cJSON_IsString(id) ? id->valuestring : "?");
+                layout_validation_add(result, msg);
+            } else if (button_mode_requires_media_player(button_mode->valuestring) &&
+                       cJSON_IsString(entity_id) && entity_id->valuestring != NULL &&
+                       !entity_in_domain(entity_id->valuestring, "media_player")) {
+                snprintf(msg, sizeof(msg), "widget %s: button_mode %s requires media_player.* entity_id",
+                    cJSON_IsString(id) ? id->valuestring : "?",
+                    button_mode->valuestring);
                 layout_validation_add(result, msg);
             }
         }

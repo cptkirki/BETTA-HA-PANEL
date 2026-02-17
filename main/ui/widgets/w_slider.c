@@ -37,7 +37,6 @@ typedef struct {
     int last_sent_value;
 } w_slider_ctx_t;
 
-static const uint32_t W_SLIDER_FILL_DRAG_HEX = 0xA1A5AA;
 static const uint32_t W_SLIDER_FILL_OFF_HEX = 0x8C98A4;
 static const uint32_t W_SLIDER_TRACK_HEX = 0x3A3E43;
 
@@ -398,8 +397,7 @@ static void slider_apply_visual(w_slider_ctx_t *ctx)
     const lv_color_t card_bg = lv_color_hex(ctx->is_on && !ctx->unavailable ? APP_UI_COLOR_CARD_BG_ON : APP_UI_COLOR_CARD_BG_OFF);
     const lv_color_t indicator_color = ctx->unavailable
                                            ? lv_color_hex(APP_UI_COLOR_CARD_BORDER)
-                                           : (ctx->dragging ? lv_color_hex(W_SLIDER_FILL_DRAG_HEX)
-                                                            : (ctx->is_on ? ctx->accent_color : lv_color_hex(W_SLIDER_FILL_OFF_HEX)));
+                                           : (ctx->is_on ? ctx->accent_color : lv_color_hex(W_SLIDER_FILL_OFF_HEX));
     const lv_color_t value_color = ctx->unavailable
                                        ? lv_color_hex(APP_UI_COLOR_TEXT_MUTED)
                                        : (ctx->is_on ? ctx->accent_color : lv_color_hex(APP_UI_COLOR_STATE_OFF));
@@ -413,22 +411,33 @@ static void slider_apply_visual(w_slider_ctx_t *ctx)
     lv_obj_set_style_text_color(ctx->state_label, state_color, LV_PART_MAIN);
     lv_obj_set_style_text_color(ctx->value_label, value_color, LV_PART_MAIN);
 
-    lv_obj_set_style_bg_color(ctx->slider, lv_color_hex(W_SLIDER_TRACK_HEX), LV_PART_MAIN);
-    lv_obj_set_style_bg_opa(ctx->slider, LV_OPA_COVER, LV_PART_MAIN);
-    lv_obj_set_style_border_width(ctx->slider, 0, LV_PART_MAIN);
+    lv_obj_set_style_bg_color(ctx->slider, lv_color_hex(W_SLIDER_TRACK_HEX), LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_bg_color(ctx->slider, lv_color_hex(W_SLIDER_TRACK_HEX), LV_PART_MAIN | LV_STATE_PRESSED);
+    lv_obj_set_style_bg_opa(ctx->slider, LV_OPA_COVER, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_bg_opa(ctx->slider, LV_OPA_COVER, LV_PART_MAIN | LV_STATE_PRESSED);
+    lv_obj_set_style_border_width(ctx->slider, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_border_width(ctx->slider, 0, LV_PART_MAIN | LV_STATE_PRESSED);
     lv_obj_set_style_pad_all(ctx->slider, 0, LV_PART_MAIN);
     lv_obj_set_style_clip_corner(ctx->slider, true, LV_PART_MAIN);
 
-    lv_obj_set_style_bg_color(ctx->slider, indicator_color, LV_PART_INDICATOR);
-    lv_obj_set_style_bg_opa(ctx->slider, LV_OPA_COVER, LV_PART_INDICATOR);
-    lv_obj_set_style_border_width(ctx->slider, 0, LV_PART_INDICATOR);
+    lv_obj_set_style_bg_color(ctx->slider, indicator_color, LV_PART_INDICATOR | LV_STATE_DEFAULT);
+    lv_obj_set_style_bg_color(ctx->slider, indicator_color, LV_PART_INDICATOR | LV_STATE_PRESSED);
+    lv_obj_set_style_bg_opa(ctx->slider, LV_OPA_COVER, LV_PART_INDICATOR | LV_STATE_DEFAULT);
+    lv_obj_set_style_bg_opa(ctx->slider, LV_OPA_COVER, LV_PART_INDICATOR | LV_STATE_PRESSED);
+    lv_obj_set_style_border_width(ctx->slider, 0, LV_PART_INDICATOR | LV_STATE_DEFAULT);
+    lv_obj_set_style_border_width(ctx->slider, 0, LV_PART_INDICATOR | LV_STATE_PRESSED);
 
-    /* Keep native knob hit-testing but render it transparent. */
-    lv_obj_set_style_bg_opa(ctx->slider, LV_OPA_TRANSP, LV_PART_KNOB);
-    lv_obj_set_style_border_opa(ctx->slider, LV_OPA_TRANSP, LV_PART_KNOB);
-    lv_obj_set_style_border_width(ctx->slider, 0, LV_PART_KNOB);
-    lv_obj_set_style_outline_width(ctx->slider, 0, LV_PART_KNOB);
-    lv_obj_set_style_shadow_width(ctx->slider, 0, LV_PART_KNOB);
+    /* Keep native knob hit-testing but render it transparent in all interaction states. */
+    lv_obj_set_style_bg_opa(ctx->slider, LV_OPA_TRANSP, LV_PART_KNOB | LV_STATE_DEFAULT);
+    lv_obj_set_style_bg_opa(ctx->slider, LV_OPA_TRANSP, LV_PART_KNOB | LV_STATE_PRESSED);
+    lv_obj_set_style_border_opa(ctx->slider, LV_OPA_TRANSP, LV_PART_KNOB | LV_STATE_DEFAULT);
+    lv_obj_set_style_border_opa(ctx->slider, LV_OPA_TRANSP, LV_PART_KNOB | LV_STATE_PRESSED);
+    lv_obj_set_style_border_width(ctx->slider, 0, LV_PART_KNOB | LV_STATE_DEFAULT);
+    lv_obj_set_style_border_width(ctx->slider, 0, LV_PART_KNOB | LV_STATE_PRESSED);
+    lv_obj_set_style_outline_width(ctx->slider, 0, LV_PART_KNOB | LV_STATE_DEFAULT);
+    lv_obj_set_style_outline_width(ctx->slider, 0, LV_PART_KNOB | LV_STATE_PRESSED);
+    lv_obj_set_style_shadow_width(ctx->slider, 0, LV_PART_KNOB | LV_STATE_DEFAULT);
+    lv_obj_set_style_shadow_width(ctx->slider, 0, LV_PART_KNOB | LV_STATE_PRESSED);
     lv_obj_set_style_pad_left(ctx->slider, 0, LV_PART_KNOB);
     lv_obj_set_style_pad_right(ctx->slider, 0, LV_PART_KNOB);
     lv_obj_set_style_pad_top(ctx->slider, 0, LV_PART_KNOB);

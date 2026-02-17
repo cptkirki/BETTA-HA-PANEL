@@ -19,6 +19,10 @@ esp_err_t w_graph_create(const ui_widget_def_t *def, lv_obj_t *parent, ui_widget
 void w_graph_apply_state(ui_widget_instance_t *instance, const ha_state_t *state);
 void w_graph_mark_unavailable(ui_widget_instance_t *instance);
 
+esp_err_t w_empty_tile_create(const ui_widget_def_t *def, lv_obj_t *parent, ui_widget_instance_t *out_instance);
+void w_empty_tile_apply_state(ui_widget_instance_t *instance, const ha_state_t *state);
+void w_empty_tile_mark_unavailable(ui_widget_instance_t *instance);
+
 esp_err_t w_light_tile_create(const ui_widget_def_t *def, lv_obj_t *parent, ui_widget_instance_t *out_instance);
 void w_light_tile_apply_state(ui_widget_instance_t *instance, const ha_state_t *state);
 void w_light_tile_mark_unavailable(ui_widget_instance_t *instance);
@@ -46,6 +50,7 @@ esp_err_t ui_widget_factory_create(const ui_widget_def_t *def, lv_obj_t *parent,
     snprintf(out_instance->slider_direction, sizeof(out_instance->slider_direction), "%s", def->slider_direction);
     snprintf(out_instance->slider_accent_color, sizeof(out_instance->slider_accent_color), "%s", def->slider_accent_color);
     snprintf(out_instance->button_accent_color, sizeof(out_instance->button_accent_color), "%s", def->button_accent_color);
+    snprintf(out_instance->button_mode, sizeof(out_instance->button_mode), "%s", def->button_mode);
     snprintf(out_instance->graph_line_color, sizeof(out_instance->graph_line_color), "%s", def->graph_line_color);
     out_instance->graph_point_count = def->graph_point_count;
     out_instance->graph_time_window_min = def->graph_time_window_min;
@@ -62,6 +67,9 @@ esp_err_t ui_widget_factory_create(const ui_widget_def_t *def, lv_obj_t *parent,
     }
     if (strcmp(def->type, "graph") == 0) {
         return w_graph_create(def, parent, out_instance);
+    }
+    if (strcmp(def->type, "empty_tile") == 0) {
+        return w_empty_tile_create(def, parent, out_instance);
     }
     if (strcmp(def->type, "light_tile") == 0) {
         return w_light_tile_create(def, parent, out_instance);
@@ -88,6 +96,8 @@ void ui_widget_factory_apply_state(ui_widget_instance_t *instance, const ha_stat
         w_slider_apply_state(instance, state);
     } else if (strcmp(instance->type, "graph") == 0) {
         w_graph_apply_state(instance, state);
+    } else if (strcmp(instance->type, "empty_tile") == 0) {
+        w_empty_tile_apply_state(instance, state);
     } else if (strcmp(instance->type, "light_tile") == 0) {
         w_light_tile_apply_state(instance, state);
     } else if (strcmp(instance->type, "heating_tile") == 0) {
@@ -110,6 +120,8 @@ void ui_widget_factory_mark_unavailable(ui_widget_instance_t *instance)
         w_slider_mark_unavailable(instance);
     } else if (strcmp(instance->type, "graph") == 0) {
         w_graph_mark_unavailable(instance);
+    } else if (strcmp(instance->type, "empty_tile") == 0) {
+        w_empty_tile_mark_unavailable(instance);
     } else if (strcmp(instance->type, "light_tile") == 0) {
         w_light_tile_mark_unavailable(instance);
     } else if (strcmp(instance->type, "heating_tile") == 0) {

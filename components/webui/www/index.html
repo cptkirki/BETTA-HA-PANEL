@@ -102,6 +102,7 @@
               <button id="addButtonBtn" class="btn small">+ Button</button>
               <button id="addSliderBtn" class="btn small">+ Slider</button>
               <button id="addGraphBtn" class="btn small">+ Graph</button>
+              <button id="addEmptyTileBtn" class="btn small">+ Empty Tile</button>
               <button id="addLightTileBtn" class="btn small">+ Light Tile</button>
               <button id="addHeatingTileBtn" class="btn small">+ Heating Tile</button>
               <button id="addWeatherTileBtn" class="btn small">+ Weather</button>
@@ -126,12 +127,13 @@
                 <option value="button">button</option>
                 <option value="slider">slider</option>
                 <option value="graph">graph</option>
+                <option value="empty_tile">empty_tile</option>
                 <option value="light_tile">light_tile</option>
                 <option value="heating_tile">heating_tile</option>
                 <option value="weather_tile">weather_tile</option>
                 <option value="weather_3day">weather_3day</option>
               </select>
-              <label>Entity
+              <label id="fEntityWrap">Entity
                 <input id="fEntity" type="text" list="entityOptions" />
                 <datalist id="entityOptions"></datalist>
               </label>
@@ -140,6 +142,15 @@
                 <datalist id="sensorEntityOptions"></datalist>
               </label>
               <div id="buttonOptions" class="slider-options hidden">
+                <label>Button Mode
+                  <select id="fButtonMode">
+                    <option value="auto">auto (default switch)</option>
+                    <option value="play_pause">play/pause (media_player)</option>
+                    <option value="stop">stop (media_player)</option>
+                    <option value="next">next (media_player)</option>
+                    <option value="previous">previous (media_player)</option>
+                  </select>
+                </label>
                 <label>Button Accent Color
                   <input id="fButtonAccentColor" type="color" value="#6fe8ff" />
                 </label>

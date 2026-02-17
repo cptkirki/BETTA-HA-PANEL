@@ -200,7 +200,7 @@ static const int64_t HA_SVC_LATENCY_INFO_MS = 0;
 static const int64_t HA_SVC_LATENCY_WARN_MS = 500;
 static const int64_t HA_SVC_TRACE_MAX_AGE_MS = 5000;
 static void ha_client_handle_text_message(const char *data, int len);
-static void ha_client_import_state_object(cJSON *state_obj);
+static bool ha_client_import_state_object(cJSON *state_obj);
 static void ha_client_publish_event(app_event_type_t type, const char *entity_id);
 static int64_t ha_client_ping_interval_ms_effective(void);
 static esp_err_t ha_client_sync_layout_entity_step(bool is_initial, uint32_t *io_index, uint32_t *out_count,
@@ -1013,6 +1013,62 @@ static bool ha_client_entity_is_media_player(const char *entity_id)
         return false;
     }
     return strncmp(entity_id, "media_player.", 13) == 0;
+}
+
+static bool ha_client_media_player_attr_key_is_tracked(const char *key)
+{
+    if (key == NULL || key[0] == '\0') {
+        return false;
+    }
+    return (strcmp(key, "volume_level") == 0) || (strcmp(key, "is_volume_muted") == 0);
+}
+
+static bool ha_client_ws_media_player_change_can_skip(cJSON *changed_entry)
+{
+    if (!cJSON_IsObject(changed_entry)) {
+        return false;
+    }
+
+    cJSON *plus_obj = cJSON_GetObjectItemCaseSensitive(changed_entry, "+");
+    if (cJSON_IsObject(plus_obj)) {
+        /* Any explicit state patch must be imported. */
+        if (cJSON_GetObjectItemCaseSensitive(plus_obj, "s") != NULL) {
+            return false;
+        }
+
+        cJSON *plus_attrs = cJSON_GetObjectItemCaseSensitive(plus_obj, "a");
+        if (cJSON_IsObject(plus_attrs)) {
+            cJSON *item = NULL;
+            cJSON_ArrayForEach(item, plus_attrs)
+            {
+                if (item->string != NULL && ha_client_media_player_attr_key_is_tracked(item->string)) {
+                    return false;
+                }
+            }
+        }
+    }
+
+    cJSON *minus_obj = cJSON_GetObjectItemCaseSensitive(changed_entry, "-");
+    if (cJSON_IsObject(minus_obj)) {
+        if (cJSON_GetObjectItemCaseSensitive(minus_obj, "s") != NULL) {
+            return false;
+        }
+
+        cJSON *minus_attrs = cJSON_GetObjectItemCaseSensitive(minus_obj, "a");
+        if (cJSON_IsArray(minus_attrs)) {
+            cJSON *key = NULL;
+            cJSON_ArrayForEach(key, minus_attrs)
+            {
+                if (cJSON_IsString(key) && key->valuestring != NULL &&
+                    ha_client_media_player_attr_key_is_tracked(key->valuestring)) {
+                    return false;
+                }
+            }
+        }
+    }
+
+    /* Remaining media_player attribute patches are currently not used by widgets. */
+    return true;
 }
 
 static bool ha_client_entity_should_use_trigger_subscription(const char *entity_id)
@@ -2379,7 +2435,7 @@ static esp_err_t ha_client_fetch_state_http(
         }
     }
 
-    ha_client_import_state_object(state_obj);
+    (void)ha_client_import_state_object(state_obj);
     cJSON_Delete(state_obj);
     int64_t t_total_ms = ha_client_now_ms() - t_start_ms;
     if (t_total_ms >= HA_SVC_LATENCY_WARN_MS) {
@@ -2804,10 +2860,10 @@ static esp_err_t ha_client_send_pong(uint32_t pong_id)
     return err;
 }
 
-static void ha_client_import_state_object(cJSON *state_obj)
+static bool ha_client_import_state_object(cJSON *state_obj)
 {
     if (!cJSON_IsObject(state_obj)) {
-        return;
+        return false;
     }
 
     cJSON *entity_id = cJSON_GetObjectItemCaseSensitive(state_obj, "entity_id");
@@ -2816,7 +2872,7 @@ static void ha_client_import_state_object(cJSON *state_obj)
 
     if (!cJSON_IsString(entity_id) || entity_id->valuestring == NULL || !cJSON_IsString(state) ||
         state->valuestring == NULL) {
-        return;
+        return false;
     }
 
     ha_state_t model_state = {0};
@@ -2824,6 +2880,12 @@ static void ha_client_import_state_object(cJSON *state_obj)
     snprintf(model_state.state, sizeof(model_state.state), "%s", state->valuestring);
     model_state.last_changed_unix_ms = esp_timer_get_time() / 1000;
     bool weather_missing_forecast = false;
+    bool is_media_player = ha_client_entity_is_media_player(model_state.entity_id);
+    ha_state_t previous_compact_state = {0};
+    bool has_previous_compact_state = false;
+    if (is_media_player) {
+        has_previous_compact_state = ha_model_get_state(model_state.entity_id, &previous_compact_state);
+    }
 
     if (cJSON_IsObject(attributes)) {
         bool serialized = false;
@@ -2832,10 +2894,10 @@ static void ha_client_import_state_object(cJSON *state_obj)
                 attributes, model_state.attributes_json, sizeof(model_state.attributes_json));
             bool weather_has_forecast = serialized && ha_client_weather_attrs_has_forecast_json(model_state.attributes_json);
             if (serialized && !weather_has_forecast) {
-                ha_state_t previous_state = {0};
-                if (ha_model_get_state(model_state.entity_id, &previous_state)) {
+                ha_state_t previous_weather_state = {0};
+                if (ha_model_get_state(model_state.entity_id, &previous_weather_state)) {
                     cJSON *previous_forecast =
-                        ha_client_extract_compact_forecast_from_attrs_json(previous_state.attributes_json);
+                        ha_client_extract_compact_forecast_from_attrs_json(previous_weather_state.attributes_json);
                     if (previous_forecast != NULL) {
                         if (!ha_client_append_compact_forecast_to_attrs_json(
                                 model_state.attributes_json, sizeof(model_state.attributes_json), previous_forecast)) {
@@ -2878,6 +2940,18 @@ static void ha_client_import_state_object(cJSON *state_obj)
     } else {
         snprintf(model_state.attributes_json, sizeof(model_state.attributes_json), "{}");
     }
+
+    bool media_player_compact_changed = true;
+    if (is_media_player && has_previous_compact_state) {
+        media_player_compact_changed =
+            (strncmp(previous_compact_state.state, model_state.state, sizeof(model_state.state)) != 0) ||
+            (strncmp(previous_compact_state.attributes_json, model_state.attributes_json,
+                sizeof(model_state.attributes_json)) != 0);
+        if (!media_player_compact_changed) {
+            model_state.last_changed_unix_ms = previous_compact_state.last_changed_unix_ms;
+        }
+    }
+
     ha_model_upsert_state(&model_state);
     if (weather_missing_forecast && s_client.mutex != NULL) {
         bool scheduled_retry = false;
@@ -2935,17 +3009,18 @@ static void ha_client_import_state_object(cJSON *state_obj)
         }
     }
     ha_model_upsert_entity(&entity);
+    return (!is_media_player) || media_player_compact_changed || !has_previous_compact_state;
 }
 
-static void ha_client_import_ws_entity_state(const char *entity_id, const char *state_value, cJSON *attrs_obj)
+static bool ha_client_import_ws_entity_state(const char *entity_id, const char *state_value, cJSON *attrs_obj)
 {
     if (entity_id == NULL || entity_id[0] == '\0' || state_value == NULL) {
-        return;
+        return false;
     }
 
     cJSON *state_obj = cJSON_CreateObject();
     if (state_obj == NULL) {
-        return;
+        return false;
     }
 
     cJSON_AddStringToObject(state_obj, "entity_id", entity_id);
@@ -2961,8 +3036,9 @@ static void ha_client_import_ws_entity_state(const char *entity_id, const char *
         cJSON_AddItemToObject(state_obj, "attributes", cJSON_CreateObject());
     }
 
-    ha_client_import_state_object(state_obj);
+    bool changed = ha_client_import_state_object(state_obj);
     cJSON_Delete(state_obj);
+    return changed;
 }
 
 static bool ha_client_entities_sub_req_known_locked(uint32_t req_id)
@@ -3034,8 +3110,11 @@ static uint32_t ha_client_import_ws_entities_added(cJSON *added_map)
         const char *state_value = cJSON_IsString(state_item) && state_item->valuestring != NULL
             ? state_item->valuestring
             : "unknown";
-        ha_client_import_ws_entity_state(entry->string, state_value, attrs_item);
+        bool state_changed = ha_client_import_ws_entity_state(entry->string, state_value, attrs_item);
         ha_client_mark_entities_seen(entry->string);
+        if (!state_changed) {
+            continue;
+        }
         ha_client_trace_service_state_changed(entry->string, state_value);
         ha_client_publish_event(EV_HA_STATE_CHANGED, entry->string);
         imported++;
@@ -3090,6 +3169,11 @@ static uint32_t ha_client_import_ws_entities_changed(cJSON *changed_map)
         if (entry->string == NULL || !cJSON_IsObject(entry)) {
             continue;
         }
+        if (ha_client_entity_is_media_player(entry->string) &&
+            ha_client_ws_media_player_change_can_skip(entry)) {
+            ha_client_mark_entities_seen(entry->string);
+            continue;
+        }
 
         ha_state_t prev = {0};
         bool has_prev = ha_model_get_state(entry->string, &prev);
@@ -3123,9 +3207,12 @@ static uint32_t ha_client_import_ws_entities_changed(cJSON *changed_map)
         cJSON *minus_obj = cJSON_GetObjectItemCaseSensitive(entry, "-");
         ha_client_apply_ws_attr_minus(attrs_obj, minus_obj);
 
-        ha_client_import_ws_entity_state(entry->string, next_state, attrs_obj);
+        bool state_changed = ha_client_import_ws_entity_state(entry->string, next_state, attrs_obj);
         cJSON_Delete(attrs_obj);
         ha_client_mark_entities_seen(entry->string);
+        if (!state_changed) {
+            continue;
+        }
         ha_client_trace_service_state_changed(entry->string, next_state);
         ha_client_publish_event(EV_HA_STATE_CHANGED, entry->string);
         updated++;
@@ -3150,9 +3237,12 @@ static uint32_t ha_client_import_ws_entities_removed(cJSON *removed_list)
         if (attrs == NULL) {
             continue;
         }
-        ha_client_import_ws_entity_state(entity_id->valuestring, "unavailable", attrs);
+        bool state_changed = ha_client_import_ws_entity_state(entity_id->valuestring, "unavailable", attrs);
         cJSON_Delete(attrs);
         ha_client_mark_entities_seen(entity_id->valuestring);
+        if (!state_changed) {
+            continue;
+        }
         ha_client_trace_service_state_changed(entity_id->valuestring, "unavailable");
         ha_client_publish_event(EV_HA_STATE_CHANGED, entity_id->valuestring);
         removed++;
@@ -3299,7 +3389,7 @@ static void ha_client_handle_result_message(cJSON *root)
                 continue;
             }
         }
-        ha_client_import_state_object(state_obj);
+        (void)ha_client_import_state_object(state_obj);
         imported++;
     }
     free(layout_entity_ids);
@@ -3400,14 +3490,15 @@ static void ha_client_handle_event_message(cJSON *root)
         cJSON *to_state = cJSON_GetObjectItemCaseSensitive(trigger, "to_state");
         cJSON *entity_id = cJSON_GetObjectItemCaseSensitive(trigger, "entity_id");
         const char *state_value = NULL;
+        bool state_changed = false;
         if (cJSON_IsObject(to_state)) {
-            ha_client_import_state_object(to_state);
+            state_changed = ha_client_import_state_object(to_state);
             cJSON *state_item = cJSON_GetObjectItemCaseSensitive(to_state, "state");
             if (cJSON_IsString(state_item) && state_item->valuestring != NULL) {
                 state_value = state_item->valuestring;
             }
         }
-        if (cJSON_IsString(entity_id) && entity_id->valuestring != NULL) {
+        if (state_changed && cJSON_IsString(entity_id) && entity_id->valuestring != NULL) {
             ha_client_trace_service_state_changed(entity_id->valuestring, state_value);
             ha_client_publish_event(EV_HA_STATE_CHANGED, entity_id->valuestring);
         }
@@ -3424,14 +3515,15 @@ static void ha_client_handle_event_message(cJSON *root)
         cJSON *new_state = cJSON_GetObjectItemCaseSensitive(data, "new_state");
         cJSON *entity_id = cJSON_GetObjectItemCaseSensitive(data, "entity_id");
         const char *state_value = NULL;
+        bool state_changed = false;
         if (cJSON_IsObject(new_state)) {
-            ha_client_import_state_object(new_state);
+            state_changed = ha_client_import_state_object(new_state);
             cJSON *state_item = cJSON_GetObjectItemCaseSensitive(new_state, "state");
             if (cJSON_IsString(state_item) && state_item->valuestring != NULL) {
                 state_value = state_item->valuestring;
             }
         }
-        if (cJSON_IsString(entity_id) && entity_id->valuestring != NULL) {
+        if (state_changed && cJSON_IsString(entity_id) && entity_id->valuestring != NULL) {
             ha_client_trace_service_state_changed(entity_id->valuestring, state_value);
             ha_client_publish_event(EV_HA_STATE_CHANGED, entity_id->valuestring);
         }

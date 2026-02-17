@@ -66,8 +66,8 @@ static ui_widget_size_limits_t ui_runtime_widget_size_limits(const char *type)
         limits.min_w = 120;
         limits.min_h = 80;
     } else if (strcmp(type, "button") == 0) {
-        limits.min_w = 180;
-        limits.min_h = 120;
+        limits.min_w = 100;
+        limits.min_h = 100;
         limits.max_w = 480;
         limits.max_h = 320;
     } else if (strcmp(type, "slider") == 0) {
@@ -76,6 +76,9 @@ static ui_widget_size_limits_t ui_runtime_widget_size_limits(const char *type)
     } else if (strcmp(type, "graph") == 0) {
         limits.min_w = 220;
         limits.min_h = 140;
+    } else if (strcmp(type, "empty_tile") == 0) {
+        limits.min_w = 120;
+        limits.min_h = 80;
     } else if (strcmp(type, "light_tile") == 0) {
         limits.min_w = 200;
         limits.min_h = 180;
@@ -259,11 +262,17 @@ static bool ui_runtime_widget_from_json(cJSON *widget_json, ui_widget_def_t *out
     cJSON *slider_direction = cJSON_GetObjectItemCaseSensitive(widget_json, "slider_direction");
     cJSON *slider_accent_color = cJSON_GetObjectItemCaseSensitive(widget_json, "slider_accent_color");
     cJSON *button_accent_color = cJSON_GetObjectItemCaseSensitive(widget_json, "button_accent_color");
+    cJSON *button_mode = cJSON_GetObjectItemCaseSensitive(widget_json, "button_mode");
     cJSON *graph_line_color = cJSON_GetObjectItemCaseSensitive(widget_json, "graph_line_color");
     cJSON *graph_point_count = cJSON_GetObjectItemCaseSensitive(widget_json, "graph_point_count");
     cJSON *graph_time_window_min = cJSON_GetObjectItemCaseSensitive(widget_json, "graph_time_window_min");
     cJSON *rect = cJSON_GetObjectItemCaseSensitive(widget_json, "rect");
-    if (!cJSON_IsString(id) || !cJSON_IsString(type) || !cJSON_IsString(entity_id) || !cJSON_IsObject(rect)) {
+    if (!cJSON_IsString(id) || !cJSON_IsString(type) || !cJSON_IsObject(rect)) {
+        return false;
+    }
+
+    const bool requires_entity = (strcmp(type->valuestring, "empty_tile") != 0);
+    if (requires_entity && !cJSON_IsString(entity_id)) {
         return false;
     }
 
@@ -279,7 +288,9 @@ static bool ui_runtime_widget_from_json(cJSON *widget_json, ui_widget_def_t *out
     snprintf(out->id, sizeof(out->id), "%s", id->valuestring);
     snprintf(out->type, sizeof(out->type), "%s", type->valuestring);
     snprintf(out->title, sizeof(out->title), "%s", cJSON_IsString(title) ? title->valuestring : id->valuestring);
-    snprintf(out->entity_id, sizeof(out->entity_id), "%s", entity_id->valuestring);
+    if (cJSON_IsString(entity_id) && entity_id->valuestring != NULL) {
+        snprintf(out->entity_id, sizeof(out->entity_id), "%s", entity_id->valuestring);
+    }
     if (cJSON_IsString(secondary_entity_id) && secondary_entity_id->valuestring != NULL) {
         snprintf(out->secondary_entity_id, sizeof(out->secondary_entity_id), "%s", secondary_entity_id->valuestring);
     }
@@ -291,6 +302,9 @@ static bool ui_runtime_widget_from_json(cJSON *widget_json, ui_widget_def_t *out
     }
     if (cJSON_IsString(button_accent_color) && button_accent_color->valuestring != NULL) {
         snprintf(out->button_accent_color, sizeof(out->button_accent_color), "%s", button_accent_color->valuestring);
+    }
+    if (cJSON_IsString(button_mode) && button_mode->valuestring != NULL) {
+        snprintf(out->button_mode, sizeof(out->button_mode), "%s", button_mode->valuestring);
     }
     if (cJSON_IsString(graph_line_color) && graph_line_color->valuestring != NULL) {
         snprintf(out->graph_line_color, sizeof(out->graph_line_color), "%s", graph_line_color->valuestring);
@@ -307,6 +321,11 @@ static bool ui_runtime_widget_from_json(cJSON *widget_json, ui_widget_def_t *out
     out->h = h->valueint;
     ui_runtime_clamp_widget_rect(out);
     return true;
+}
+
+static bool ui_runtime_is_background_widget_type(const char *type)
+{
+    return type != NULL && strcmp(type, "empty_tile") == 0;
 }
 
 esp_err_t ui_runtime_load_layout(const char *layout_json)
@@ -351,17 +370,24 @@ esp_err_t ui_runtime_load_layout(const char *layout_json)
         }
 
         int widget_count = cJSON_GetArraySize(widgets);
-        for (int w = 0; w < widget_count; w++) {
-            if (s_widget_count >= APP_MAX_WIDGETS_TOTAL) {
-                break;
-            }
-            ui_widget_def_t def = {0};
-            if (!ui_runtime_widget_from_json(cJSON_GetArrayItem(widgets, w), &def)) {
-                continue;
-            }
-            esp_err_t err = ui_widget_factory_create(&def, page_container, &s_widgets[s_widget_count]);
-            if (err == ESP_OK) {
-                s_widget_count++;
+        for (int pass = 0; pass < 2; pass++) {
+            const bool background_pass = (pass == 0);
+            for (int w = 0; w < widget_count; w++) {
+                if (s_widget_count >= APP_MAX_WIDGETS_TOTAL) {
+                    break;
+                }
+                ui_widget_def_t def = {0};
+                if (!ui_runtime_widget_from_json(cJSON_GetArrayItem(widgets, w), &def)) {
+                    continue;
+                }
+                bool is_background = ui_runtime_is_background_widget_type(def.type);
+                if (is_background != background_pass) {
+                    continue;
+                }
+                esp_err_t err = ui_widget_factory_create(&def, page_container, &s_widgets[s_widget_count]);
+                if (err == ESP_OK) {
+                    s_widget_count++;
+                }
             }
         }
     }

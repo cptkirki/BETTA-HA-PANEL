@@ -29,6 +29,7 @@ idf_component_register(
         "ui/widgets/w_button.c"
         "ui/widgets/w_slider.c"
         "ui/widgets/w_graph.c"
+        "ui/widgets/w_empty_tile.c"
         "ui/widgets/w_light_tile.c"
         "ui/widgets/w_heating_tile.c"
         "ui/widgets/w_weather_tile.c"

@@ -3,6 +3,7 @@ const CANVAS_WIDTH = 720;
 const CANVAS_HEIGHT = 600;
 const MIN_WIDGET_SIZE = 60;
 const DEFAULT_SLIDER_DIRECTION = "auto";
+const DEFAULT_BUTTON_MODE = "auto";
 const DEFAULT_BUTTON_ACCENT_COLOR = "#6fe8ff";
 const DEFAULT_SLIDER_ACCENT_COLOR = "#6fe8ff";
 const DEFAULT_GRAPH_LINE_COLOR = "#6fe8ff";
@@ -27,6 +28,13 @@ const SLIDER_ENTITY_DOMAINS = new Set([
   "media_player",
   "cover",
 ]);
+const BUTTON_MODES = new Set([
+  "auto",
+  "play_pause",
+  "stop",
+  "next",
+  "previous",
+]);
 
 function widgetSizeLimits(type) {
   const fallback = {
@@ -40,11 +48,13 @@ function widgetSizeLimits(type) {
     case "sensor":
       return { minW: 120, minH: 80, maxW: CANVAS_WIDTH, maxH: CANVAS_HEIGHT };
     case "button":
-      return { minW: 180, minH: 120, maxW: 480, maxH: 320 };
+      return { minW: 100, minH: 100, maxW: 480, maxH: 320 };
     case "slider":
       return { minW: 100, minH: 100, maxW: CANVAS_WIDTH, maxH: CANVAS_HEIGHT };
     case "graph":
       return { minW: 220, minH: 140, maxW: CANVAS_WIDTH, maxH: CANVAS_HEIGHT };
+    case "empty_tile":
+      return { minW: 120, minH: 80, maxW: CANVAS_WIDTH, maxH: CANVAS_HEIGHT };
     case "light_tile":
       return { minW: 200, minH: 180, maxW: 480, maxH: 480 };
     case "heating_tile":
@@ -123,6 +133,7 @@ const el = {
   addButtonBtn: document.getElementById("addButtonBtn"),
   addSliderBtn: document.getElementById("addSliderBtn"),
   addGraphBtn: document.getElementById("addGraphBtn"),
+  addEmptyTileBtn: document.getElementById("addEmptyTileBtn"),
   addLightTileBtn: document.getElementById("addLightTileBtn"),
   addHeatingTileBtn: document.getElementById("addHeatingTileBtn"),
   addWeatherTileBtn: document.getElementById("addWeatherTileBtn"),
@@ -136,10 +147,12 @@ const el = {
   jsonPaste: document.getElementById("jsonPaste"),
   fTitle: document.getElementById("fTitle"),
   fType: document.getElementById("fType"),
+  fEntityWrap: document.getElementById("fEntityWrap"),
   fEntity: document.getElementById("fEntity"),
   fSecondaryEntityWrap: document.getElementById("fSecondaryEntityWrap"),
   fSecondaryEntity: document.getElementById("fSecondaryEntity"),
   buttonOptions: document.getElementById("buttonOptions"),
+  fButtonMode: document.getElementById("fButtonMode"),
   fSliderEntityDomain: document.getElementById("fSliderEntityDomain"),
   fButtonAccentColor: document.getElementById("fButtonAccentColor"),
   sliderOptions: document.getElementById("sliderOptions"),
@@ -208,6 +221,15 @@ function normalizeSliderEntityDomain(value) {
   return SLIDER_ENTITY_DOMAINS.has(value) ? value : DEFAULT_SLIDER_ENTITY_DOMAIN;
 }
 
+function normalizeButtonMode(value) {
+  return BUTTON_MODES.has(value) ? value : DEFAULT_BUTTON_MODE;
+}
+
+function buttonModeRequiresMediaPlayer(value) {
+  const mode = normalizeButtonMode(value);
+  return mode === "play_pause" || mode === "stop" || mode === "next" || mode === "previous";
+}
+
 function normalizeHexColor(value, fallback = DEFAULT_SLIDER_ACCENT_COLOR) {
   const source = (typeof value === "string" ? value : "").trim();
   const fallbackNorm = typeof fallback === "string" ? fallback.trim().toLowerCase() : DEFAULT_SLIDER_ACCENT_COLOR;
@@ -255,6 +277,12 @@ function normalizeLayoutWidgets(layout) {
       if (!widget || typeof widget !== "object") continue;
       if (widget.type === "button") {
         widget.button_accent_color = normalizeHexColor(widget.button_accent_color, DEFAULT_BUTTON_ACCENT_COLOR);
+        const buttonMode = normalizeButtonMode(widget.button_mode);
+        if (buttonModeRequiresMediaPlayer(buttonMode) && !String(widget.entity_id || "").startsWith("media_player.")) {
+          widget.button_mode = DEFAULT_BUTTON_MODE;
+        } else {
+          widget.button_mode = buttonMode;
+        }
       }
       if (widget.type === "slider") {
         widget.slider_direction = normalizeSliderDirection(widget.slider_direction);
@@ -800,9 +828,25 @@ function inspectorSliderEntityDomain() {
   return normalizeSliderEntityDomain(el.fSliderEntityDomain?.value);
 }
 
-function allowedEntityDomainsForWidgetType(type, sliderDomain = DEFAULT_SLIDER_ENTITY_DOMAIN) {
+function inspectorButtonMode() {
+  const widget = selectedWidget();
+  if (widget?.type === "button") {
+    return normalizeButtonMode(widget.button_mode);
+  }
+  return normalizeButtonMode(el.fButtonMode?.value);
+}
+
+function allowedEntityDomainsForWidgetType(
+  type,
+  sliderDomain = DEFAULT_SLIDER_ENTITY_DOMAIN,
+  buttonMode = DEFAULT_BUTTON_MODE,
+) {
+  if (type === "empty_tile") return [];
   if (type === "sensor") return ["sensor"];
-  if (type === "button") return ["switch"];
+  if (type === "button") {
+    const normalizedMode = normalizeButtonMode(buttonMode);
+    return buttonModeRequiresMediaPlayer(normalizedMode) ? ["media_player"] : ["switch", "media_player"];
+  }
   if (type === "light_tile") return ["light"];
   if (type === "heating_tile") return ["climate"];
   if (type === "weather_tile" || type === "weather_3day") return ["weather"];
@@ -816,8 +860,12 @@ function allowedEntityDomainsForWidgetType(type, sliderDomain = DEFAULT_SLIDER_E
   return [];
 }
 
-function expectedDomainForWidgetType(type, sliderDomain = DEFAULT_SLIDER_ENTITY_DOMAIN) {
-  const domains = allowedEntityDomainsForWidgetType(type, sliderDomain);
+function expectedDomainForWidgetType(
+  type,
+  sliderDomain = DEFAULT_SLIDER_ENTITY_DOMAIN,
+  buttonMode = DEFAULT_BUTTON_MODE,
+) {
+  const domains = allowedEntityDomainsForWidgetType(type, sliderDomain, buttonMode);
   return domains.length === 1 ? domains[0] : "";
 }
 
@@ -826,21 +874,38 @@ function listEntitiesByDomain(domain) {
   return editor.entities.filter((entity) => typeof entity.id === "string" && entity.id.startsWith(`${domain}.`));
 }
 
-function entityMatchesWidgetType(entity, type, sliderDomain = DEFAULT_SLIDER_ENTITY_DOMAIN) {
+function entityMatchesWidgetType(
+  entity,
+  type,
+  sliderDomain = DEFAULT_SLIDER_ENTITY_DOMAIN,
+  buttonMode = DEFAULT_BUTTON_MODE,
+) {
+  if (type === "empty_tile") return true;
+
   const id = typeof entity?.id === "string" ? entity.id : "";
   if (!id) return false;
 
-  const allowedDomains = allowedEntityDomainsForWidgetType(type, sliderDomain);
+  const allowedDomains = allowedEntityDomainsForWidgetType(type, sliderDomain, buttonMode);
   if (!allowedDomains.length) return true;
   return allowedDomains.some((domain) => id.startsWith(`${domain}.`));
 }
 
-function listEntitiesForWidgetType(type, sliderDomain = DEFAULT_SLIDER_ENTITY_DOMAIN) {
-  return editor.entities.filter((entity) => entityMatchesWidgetType(entity, type, sliderDomain));
+function listEntitiesForWidgetType(
+  type,
+  sliderDomain = DEFAULT_SLIDER_ENTITY_DOMAIN,
+  buttonMode = DEFAULT_BUTTON_MODE,
+) {
+  if (type === "empty_tile") return [];
+  return editor.entities.filter((entity) => entityMatchesWidgetType(entity, type, sliderDomain, buttonMode));
 }
 
-function pickDefaultEntityForWidgetType(type, sliderDomain = DEFAULT_SLIDER_ENTITY_DOMAIN) {
-  const matching = listEntitiesForWidgetType(type, sliderDomain);
+function pickDefaultEntityForWidgetType(
+  type,
+  sliderDomain = DEFAULT_SLIDER_ENTITY_DOMAIN,
+  buttonMode = DEFAULT_BUTTON_MODE,
+) {
+  if (type === "empty_tile") return "";
+  const matching = listEntitiesForWidgetType(type, sliderDomain, buttonMode);
   if (matching.length > 0) return matching[0].id;
   return editor.entities[0]?.id || "sensor.example";
 }
@@ -954,12 +1019,13 @@ async function fetchEntitySuggestions(domain, search, limit) {
 function primaryEntitySource() {
   const inspectorType = inspectorWidgetType();
   const sliderDomain = inspectorSliderEntityDomain();
-  const typedOptions = listEntitiesForWidgetType(inspectorType, sliderDomain);
+  const buttonMode = inspectorButtonMode();
+  const typedOptions = listEntitiesForWidgetType(inspectorType, sliderDomain, buttonMode);
   return typedOptions.length > 0 ? typedOptions : editor.entities;
 }
 
 function defaultPrimaryEntityDomain() {
-  return expectedDomainForWidgetType(inspectorWidgetType(), inspectorSliderEntityDomain());
+  return expectedDomainForWidgetType(inspectorWidgetType(), inspectorSliderEntityDomain(), inspectorButtonMode());
 }
 
 function scheduleEntityAutocomplete(kind, immediate = false) {
@@ -968,6 +1034,7 @@ function scheduleEntityAutocomplete(kind, immediate = false) {
   const input = isSecondary ? el.fSecondaryEntity : el.fEntity;
   const options = isSecondary ? el.sensorEntityOptions : el.entityOptions;
   if (!input || !options) return;
+  if (!isSecondary && input.disabled) return;
   if (isSecondary && input.disabled) return;
 
   if (state.timerId !== null) {
@@ -983,7 +1050,7 @@ function scheduleEntityAutocomplete(kind, immediate = false) {
     const source = isSecondary ? listEntitiesByDomain("sensor") : primaryEntitySource();
     const allowedDomains = isSecondary
       ? ["sensor"]
-      : allowedEntityDomainsForWidgetType(inspectorWidgetType(), inspectorSliderEntityDomain());
+      : allowedEntityDomainsForWidgetType(inspectorWidgetType(), inspectorSliderEntityDomain(), inspectorButtonMode());
 
     if (domain && allowedDomains.length > 0 && !allowedDomains.includes(domain)) {
       setEntityOptionsList(options, []);
@@ -1068,7 +1135,8 @@ async function refreshStates() {
 function renderEntityOptions() {
   const inspectorType = inspectorWidgetType();
   const sliderDomain = inspectorSliderEntityDomain();
-  const inspectorOptions = listEntitiesForWidgetType(inspectorType, sliderDomain);
+  const buttonMode = inspectorButtonMode();
+  const inspectorOptions = listEntitiesForWidgetType(inspectorType, sliderDomain, buttonMode);
   const primaryOptions = inspectorOptions.length > 0 ? inspectorOptions : editor.entities;
   setEntityOptionsList(el.entityOptions, primaryOptions.slice(0, ENTITY_AUTOCOMPLETE_MAX_ITEMS));
 
@@ -1084,6 +1152,17 @@ function renderEntityOptions() {
   el.fSecondaryEntity.disabled = !secondaryEnabled;
   if (!secondaryEnabled) {
     el.fSecondaryEntity.value = "";
+  }
+
+  const primaryEnabled = inspectorType !== "empty_tile";
+  if (el.fEntityWrap) {
+    el.fEntityWrap.classList.toggle("hidden", !primaryEnabled);
+  }
+  if (el.fEntity) {
+    el.fEntity.disabled = !primaryEnabled;
+    if (!primaryEnabled) {
+      el.fEntity.value = "";
+    }
   }
 }
 
@@ -1253,12 +1332,17 @@ function renderCanvas() {
 
   for (const widget of page.widgets) {
     const box = document.createElement("div");
-    box.className = `widget-box ${widget.id === editor.selectedWidgetId ? "selected" : ""}`;
+    const isEmptyTile = widget.type === "empty_tile";
+    const isMediaPlayerButton = widget.type === "button" && String(widget.entity_id || "").startsWith("media_player.");
+    const previewTitle = (isMediaPlayerButton && !String(widget.title || "").trim()) ? "" : (widget.title || widget.id);
+    box.className = `widget-box ${isEmptyTile ? "empty-tile" : ""} ${widget.id === editor.selectedWidgetId ? "selected" : ""}`;
     box.dataset.widgetId = widget.id;
+    box.style.zIndex = isEmptyTile ? "1" : "10";
+    const previewState = isEmptyTile ? "design" : (editor.states.get(widget.entity_id) || "unavailable");
     box.innerHTML = `
       <div class="w-type">${widget.type}</div>
-      <div class="w-title">${widget.title || widget.id}</div>
-      <div class="w-state">${editor.states.get(widget.entity_id) || "unavailable"}</div>
+      <div class="w-title">${previewTitle}</div>
+      <div class="w-state">${previewState}</div>
       <div class="resize-handle"></div>
     `;
     geometryStyle(box, widget.rect);
@@ -1295,6 +1379,9 @@ function renderInspector() {
     }
     if (el.fButtonAccentColor) {
       el.fButtonAccentColor.value = DEFAULT_BUTTON_ACCENT_COLOR;
+    }
+    if (el.fButtonMode) {
+      el.fButtonMode.value = DEFAULT_BUTTON_MODE;
     }
     if (el.fSliderAccentColor) {
       el.fSliderAccentColor.value = DEFAULT_SLIDER_ACCENT_COLOR;
@@ -1334,13 +1421,21 @@ function renderInspector() {
   }
   if (isButton) {
     const accent = normalizeHexColor(widget.button_accent_color, DEFAULT_BUTTON_ACCENT_COLOR);
+    const buttonMode = normalizeButtonMode(widget.button_mode);
     widget.button_accent_color = accent;
+    widget.button_mode = buttonMode;
     if (el.fButtonAccentColor) {
       el.fButtonAccentColor.value = accent;
+    }
+    if (el.fButtonMode) {
+      el.fButtonMode.value = buttonMode;
     }
   } else {
     if (el.fButtonAccentColor) {
       el.fButtonAccentColor.value = DEFAULT_BUTTON_ACCENT_COLOR;
+    }
+    if (el.fButtonMode) {
+      el.fButtonMode.value = DEFAULT_BUTTON_MODE;
     }
   }
   if (isSlider) {
@@ -1454,9 +1549,13 @@ function addWidget(type) {
   const entityId = pickDefaultEntityForWidgetType(type, sliderDomain);
   const secondaryEntityId = type === "heating_tile" ? pickDefaultEntityForWidgetType("sensor") : "";
   const defaultW =
-    type === "weather_3day" ? 360 : (type === "light_tile" || type === "heating_tile" || type === "weather_tile") ? 300 : 220;
+    type === "weather_3day" ? 360
+      : (type === "light_tile" || type === "heating_tile" || type === "weather_tile" || type === "empty_tile") ? 300
+      : 220;
   const defaultH =
-    type === "weather_3day" ? 260 : (type === "light_tile" || type === "heating_tile" || type === "weather_tile") ? 260 : 120;
+    type === "weather_3day" ? 260
+      : (type === "light_tile" || type === "heating_tile" || type === "weather_tile" || type === "empty_tile") ? 260
+      : 120;
   const rect = clampRectToCanvas({ x: 20, y: 20, w: defaultW, h: defaultH }, type);
 
   const widget = {
@@ -1473,6 +1572,7 @@ function addWidget(type) {
     widget.slider_accent_color = DEFAULT_SLIDER_ACCENT_COLOR;
   }
   if (type === "button") {
+    widget.button_mode = DEFAULT_BUTTON_MODE;
     widget.button_accent_color = DEFAULT_BUTTON_ACCENT_COLOR;
   }
   if (type === "graph") {
@@ -1501,10 +1601,13 @@ function applyInspector() {
   const sliderDomain = widgetType === "slider"
     ? normalizeSliderEntityDomain(el.fSliderEntityDomain?.value)
     : DEFAULT_SLIDER_ENTITY_DOMAIN;
-  const nextEntityId = el.fEntity.value.trim() || pickDefaultEntityForWidgetType(widgetType, sliderDomain);
+  const buttonMode = widgetType === "button"
+    ? normalizeButtonMode(el.fButtonMode?.value)
+    : DEFAULT_BUTTON_MODE;
+  const nextEntityId = el.fEntity.value.trim() || pickDefaultEntityForWidgetType(widgetType, sliderDomain, buttonMode);
 
-  if (!entityMatchesWidgetType({ id: nextEntityId }, widgetType, sliderDomain)) {
-    const allowedDomains = allowedEntityDomainsForWidgetType(widgetType, sliderDomain);
+  if (!entityMatchesWidgetType({ id: nextEntityId }, widgetType, sliderDomain, buttonMode)) {
+    const allowedDomains = allowedEntityDomainsForWidgetType(widgetType, sliderDomain, buttonMode);
     const allowedHint = allowedDomains.length ? allowedDomains.join(", ") : "the expected domain";
     setStatus(`Entity must use domain: ${allowedHint}`, true);
     return;
@@ -1523,8 +1626,10 @@ function applyInspector() {
     widget.secondary_entity_id = "";
   }
   if (widgetType === "button") {
+    widget.button_mode = buttonMode;
     widget.button_accent_color = normalizeHexColor(el.fButtonAccentColor?.value, DEFAULT_BUTTON_ACCENT_COLOR);
   } else {
+    delete widget.button_mode;
     delete widget.button_accent_color;
   }
   if (widgetType === "slider") {
@@ -1628,6 +1733,7 @@ function bindUi() {
   el.addButtonBtn.onclick = () => addWidget("button");
   el.addSliderBtn.onclick = () => addWidget("slider");
   el.addGraphBtn.onclick = () => addWidget("graph");
+  el.addEmptyTileBtn.onclick = () => addWidget("empty_tile");
   el.addLightTileBtn.onclick = () => addWidget("light_tile");
   el.addHeatingTileBtn.onclick = () => addWidget("heating_tile");
   el.addWeatherTileBtn.onclick = () => addWidget("weather_tile");
@@ -1637,6 +1743,7 @@ function bindUi() {
   el.reloadBtn.onclick = () => loadLayout();
   el.fType.onchange = () => {
     const sliderDomain = normalizeSliderEntityDomain(el.fSliderEntityDomain?.value);
+    const buttonMode = normalizeButtonMode(el.fButtonMode?.value);
     if (el.buttonOptions) {
       el.buttonOptions.classList.toggle("hidden", el.fType.value !== "button");
     }
@@ -1647,10 +1754,16 @@ function bindUi() {
       el.graphOptions.classList.toggle("hidden", el.fType.value !== "graph");
     }
     if (el.fType.value === "button") {
+      if (el.fButtonMode) {
+        el.fButtonMode.value = buttonMode;
+      }
       if (el.fButtonAccentColor) {
         el.fButtonAccentColor.value = normalizeHexColor(el.fButtonAccentColor.value, DEFAULT_BUTTON_ACCENT_COLOR);
       }
     } else {
+      if (el.fButtonMode) {
+        el.fButtonMode.value = DEFAULT_BUTTON_MODE;
+      }
       if (el.fButtonAccentColor) {
         el.fButtonAccentColor.value = DEFAULT_BUTTON_ACCENT_COLOR;
       }
@@ -1690,8 +1803,11 @@ function bindUi() {
     }
     renderEntityOptions();
     const currentEntity = el.fEntity.value.trim();
-    if (!entityMatchesWidgetType({ id: currentEntity }, el.fType.value, sliderDomain)) {
-      el.fEntity.value = pickDefaultEntityForWidgetType(el.fType.value, sliderDomain);
+    const effectiveButtonMode = el.fType.value === "button"
+      ? normalizeButtonMode(el.fButtonMode?.value)
+      : DEFAULT_BUTTON_MODE;
+    if (!entityMatchesWidgetType({ id: currentEntity }, el.fType.value, sliderDomain, effectiveButtonMode)) {
+      el.fEntity.value = pickDefaultEntityForWidgetType(el.fType.value, sliderDomain, effectiveButtonMode);
     }
     if (el.fType.value === "heating_tile") {
       const sensorEntity = el.fSecondaryEntity.value.trim();
@@ -1705,6 +1821,19 @@ function bindUi() {
   if (el.fEntity) {
     el.fEntity.oninput = () => scheduleEntityAutocomplete("primary");
     el.fEntity.onfocus = () => scheduleEntityAutocomplete("primary", true);
+  }
+  if (el.fButtonMode) {
+    el.fButtonMode.onchange = () => {
+      el.fButtonMode.value = normalizeButtonMode(el.fButtonMode.value);
+      if (inspectorWidgetType() !== "button") return;
+      renderEntityOptions();
+      scheduleEntityAutocomplete("primary", true);
+      const currentEntity = el.fEntity.value.trim();
+      const buttonMode = inspectorButtonMode();
+      if (!entityMatchesWidgetType({ id: currentEntity }, "button", DEFAULT_SLIDER_ENTITY_DOMAIN, buttonMode)) {
+        el.fEntity.value = pickDefaultEntityForWidgetType("button", DEFAULT_SLIDER_ENTITY_DOMAIN, buttonMode);
+      }
+    };
   }
   if (el.fSliderEntityDomain) {
     el.fSliderEntityDomain.onchange = () => {

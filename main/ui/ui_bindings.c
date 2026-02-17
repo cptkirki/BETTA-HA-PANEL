@@ -62,6 +62,25 @@ static void ui_bindings_apply_optimistic_power_state(const char *entity_id, bool
     }
 }
 
+static void ui_bindings_apply_optimistic_state_text(const char *entity_id, const char *state_text)
+{
+    if (entity_id == NULL || entity_id[0] == '\0' || state_text == NULL || state_text[0] == '\0') {
+        return;
+    }
+
+    ha_state_t state = {0};
+    if (!ha_model_get_state(entity_id, &state)) {
+        strlcpy(state.entity_id, entity_id, sizeof(state.entity_id));
+        strlcpy(state.attributes_json, "{}", sizeof(state.attributes_json));
+    }
+
+    strlcpy(state.state, state_text, sizeof(state.state));
+    state.last_changed_unix_ms = esp_timer_get_time() / 1000;
+    if (ha_model_upsert_state(&state) == ESP_OK) {
+        ui_bindings_publish_state_changed_event(entity_id);
+    }
+}
+
 static bool ui_bindings_allow_power_command_now(const char *entity_id, bool target_known, bool target_on)
 {
     if (entity_id == NULL || entity_id[0] == '\0') {
@@ -244,4 +263,51 @@ esp_err_t ui_bindings_set_slider_value(const char *entity_id, int value)
     }
 
     return ha_client_call_service(domain, service, payload);
+}
+
+esp_err_t ui_bindings_media_player_action(const char *entity_id, ui_bindings_media_action_t action)
+{
+    if (entity_id == NULL || entity_id[0] == '\0') {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    char domain[32] = {0};
+    if (!split_entity_id(entity_id, domain, sizeof(domain))) {
+        return ESP_ERR_INVALID_ARG;
+    }
+    if (strcmp(domain, HA_DOMAIN_MEDIA_PLAYER) != 0) {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    const char *service = NULL;
+    switch (action) {
+    case UI_BINDINGS_MEDIA_ACTION_PLAY_PAUSE:
+        service = "media_play_pause";
+        break;
+    case UI_BINDINGS_MEDIA_ACTION_STOP:
+        service = "media_stop";
+        break;
+    case UI_BINDINGS_MEDIA_ACTION_NEXT:
+        service = "media_next_track";
+        break;
+    case UI_BINDINGS_MEDIA_ACTION_PREVIOUS:
+        service = "media_previous_track";
+        break;
+    default:
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    char payload[192] = {0};
+    snprintf(payload, sizeof(payload), "{\"entity_id\":\"%s\"}", entity_id);
+
+    esp_err_t err = ha_client_call_service(domain, service, payload);
+    if (err == ESP_OK && action == UI_BINDINGS_MEDIA_ACTION_PLAY_PAUSE) {
+        ha_state_t current = {0};
+        if (ha_model_get_state(entity_id, &current) && strcmp(current.state, "playing") == 0) {
+            ui_bindings_apply_optimistic_state_text(entity_id, "paused");
+        } else {
+            ui_bindings_apply_optimistic_state_text(entity_id, "playing");
+        }
+    }
+    return err;
 }

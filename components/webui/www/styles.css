@@ -348,6 +348,11 @@ textarea {
   transition: box-shadow 120ms ease, border-color 120ms ease, transform 120ms ease;
 }
 
+.widget-box.empty-tile {
+  border-color: #314456;
+  background: rgba(29, 41, 53, 0.95);
+}
+
 .widget-box.selected {
   border-color: #ffd05e;
   box-shadow: 0 0 0 1px #ffd05e inset;
