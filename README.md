@@ -6,8 +6,8 @@ A runtime configurable Home Assistant dashboard for the ESP32-P4 Smart 86 Box de
 ETTA HA Panel turns the Smart86 Box into a standalone 720×720 Home Assistant wall panel. The dashboard is configured directly on the device via the integrated BETTA Editor, while layout and settings are stored as JSON in LittleFS.
 
 - Live connection to Home Assistant via WebSocket (optionally with REST fallback)
-- Local web editor at http://<panel-ip> for layout, widgets, and settings
-- Integrated provisioning flow for Wi-Fi and Home Assistant (including the setup AP BETTA-Setup)
+- Local web editor at `http://<panel-ip>` for layout, widgets, and settings
+- Integrated provisioning flow for Wi-Fi and Home Assistant (including the setup AP `BETTA-Setup`)
 - Multi-page widget dashboard, e.g., sensor, button, slider, graph, light, heating, and weather tiles
 
 A few examples:
