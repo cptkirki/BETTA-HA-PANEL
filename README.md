@@ -12,10 +12,8 @@ ETTA HA Panel turns the Smart86 Box into a standalone 720×720 Home Assistant wa
 
 A few examples:
 
-![alt text](https://github.com/cptkirki/BETTA-HA-PANEL/blob/main/images/light%20example.jpg "Light tile example")
+![alt text](https://github.com/cptkirki/BETTA-HA-PANEL/blob/main/images/light%20on%20example.jpg "Light tiles ON example")   ![alt text](https://github.com/cptkirki/BETTA-HA-PANEL/blob/main/images/heating%20on%20example.jpg "Heating ON example")
 
-
-![alt text](https://github.com/cptkirki/BETTA-HA-PANEL/blob/main/images/heating%20heating.jpg "Heating tile example")
 
 
 ![alt text](https://github.com/cptkirki/BETTA-HA-PANEL/blob/main/images/weather%20forecast.jpg "3day weather forecast")
