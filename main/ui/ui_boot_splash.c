@@ -185,7 +185,7 @@ static lv_obj_t *splash_create_emblem(lv_obj_t *parent)
     lv_obj_set_size(emblem, 360, 220);
     lv_obj_align(emblem, LV_ALIGN_TOP_MID, 0, 100);
     lv_obj_t *fallback = lv_label_create(emblem);
-    lv_label_set_text(fallback, "SMART86");
+    lv_label_set_text(fallback, "BETTA86");
     lv_obj_set_style_text_color(fallback, lv_color_hex(SPLASH_ACCENT_HEX), LV_PART_MAIN);
 #if LV_FONT_MONTSERRAT_48
     lv_obj_set_style_text_font(fallback, &lv_font_montserrat_48, LV_PART_MAIN);
@@ -241,7 +241,7 @@ esp_err_t ui_boot_splash_show(void)
     lv_obj_set_style_bg_opa(s_splash.progress, LV_OPA_COVER, LV_PART_INDICATOR);
 
     s_splash.title = lv_label_create(s_splash.root);
-    lv_label_set_text(s_splash.title, "SMART86 OS");
+    lv_label_set_text(s_splash.title, "BETTA86 OS");
     lv_obj_set_style_text_color(s_splash.title, lv_color_hex(SPLASH_TITLE_HEX), LV_PART_MAIN);
 #if LV_FONT_MONTSERRAT_48
     lv_obj_set_style_text_font(s_splash.title, &lv_font_montserrat_48, LV_PART_MAIN);
