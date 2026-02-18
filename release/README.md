@@ -1,6 +1,6 @@
 ## ESP-Hosted C6 Firmware Source
 
-The file `network_adapter_esp32c6_2.11.7.bin` in this folder is taken from the official ESP-Hosted firmware release:
+The original C6 adapter firmware used for this release was:
 
 - https://github.com/esphome/esp-hosted-firmware/releases/tag/v2.11.7
 
@@ -8,7 +8,13 @@ SHA256:
 
 - `2AA46DBCD18F5B2046F58B82CDC62BDF21AF137930E67C4B3B114F6E3E0DAF15`
 
-Project policy:
+Important:
+
+- The C6 `network_adapter` firmware is already embedded into the generated factory image `betta86-ha-panel.factory.bin`.
+- For flashing/distribution, the factory image is sufficient.
+- Keeping `network_adapter_esp32c6*.bin` in the repo is optional and not required for release delivery.
+
+Project policy (build/runtime):
 
 - Use C6 firmware only from `release/`.
 - Do not auto-build C6 firmware in this repository.

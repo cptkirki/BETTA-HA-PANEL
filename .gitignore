@@ -5,6 +5,7 @@ lvgl_design/
 sdkconfig.old
 managed_components/
 tools/
+release/network_adapter_esp32c6*.bin
 main/ui/weather_icons/**
 !main/ui/weather_icons/
 !main/ui/weather_icons/UPSTREAM_LINK.txt
