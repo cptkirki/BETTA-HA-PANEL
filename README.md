@@ -1,5 +1,5 @@
-# BETTA HA Panel ![alt text](https://github.com/cptkirki/BETTA-HA-PANEL/blob/main/images/BETTAOS.jpg "BETTA OS Logo")
-
+![alt text](https://github.com/cptkirki/BETTA-HA-PANEL/blob/main/images/BETTAOS.jpg "BETTA OS Logo")
+# BETTA HA Panel 
 A runtime configurable Home Assistant dashboard for the ESP32-P4 Smart 86 Box development board.
 
 ## Projektbeschreibung
@@ -23,6 +23,7 @@ Ein paar Beispiele:
 
 Configuration via webconfig in BETTA Editor:
 available Widgets:
+
 <img width="319" height="130" alt="image" src="https://github.com/user-attachments/assets/1a248656-d01f-4585-a639-6d7dceafd08d" />
 
 Widgets can be configured and placed on the canvas:
