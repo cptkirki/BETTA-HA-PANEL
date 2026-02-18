@@ -10,6 +10,7 @@ typedef struct {
     char wifi_ssid[APP_WIFI_SSID_MAX_LEN];
     char wifi_password[APP_WIFI_PASSWORD_MAX_LEN];
     char wifi_country_code[APP_WIFI_COUNTRY_CODE_MAX_LEN];
+    char wifi_bssid[APP_WIFI_BSSID_MAX_LEN];
     char ha_ws_url[APP_HA_WS_URL_MAX_LEN];
     char ha_access_token[APP_HA_ACCESS_TOKEN_MAX_LEN];
     bool ha_rest_enabled;

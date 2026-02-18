@@ -10,7 +10,14 @@
 #include <time.h>
 
 #include "cJSON.h"
+#include "esp_err.h"
+#include "esp_heap_caps.h"
+#include "esp_log.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/queue.h"
+#include "freertos/task.h"
 
+#include "ui/fonts/app_text_fonts.h"
 #include "ui/ui_i18n.h"
 #include "ui/theme/theme_default.h"
 
@@ -26,6 +33,10 @@
 #define GRAPH_HISTORY_RETENTION_MIN 1440U
 #define GRAPH_HISTORY_RETENTION_SEC (GRAPH_HISTORY_RETENTION_MIN * 60U)
 #define GRAPH_HISTORY_MAX_SAMPLES ((int)(GRAPH_HISTORY_RETENTION_SEC / GRAPH_HISTORY_BUCKET_SEC))
+#define GRAPH_HISTORY_SAVE_INTERVAL_SEC 120U
+#define GRAPH_HISTORY_PERSIST_QUEUE_LEN 4U
+#define GRAPH_HISTORY_PERSIST_TASK_STACK 4096
+#define GRAPH_HISTORY_PERSIST_TASK_PRIO 2
 
 #define GRAPH_HISTORY_FILE_MAGIC 0x47525048U
 #define GRAPH_HISTORY_FILE_VERSION 1U
@@ -48,6 +59,13 @@ typedef struct {
 } graph_history_file_header_t;
 
 typedef struct {
+    char history_path[GRAPH_HISTORY_PATH_MAX];
+    int history_count;
+    uint32_t bucket_ts;
+    graph_sample_t history[GRAPH_HISTORY_MAX_SAMPLES];
+} graph_history_persist_job_t;
+
+typedef struct {
     lv_obj_t *card;
     lv_obj_t *title_label;
     lv_obj_t *value_label;
@@ -59,6 +77,8 @@ typedef struct {
     char history_path[GRAPH_HISTORY_PATH_MAX];
     graph_sample_t history[GRAPH_HISTORY_MAX_SAMPLES];
     int history_count;
+    bool history_dirty;
+    uint32_t last_persist_bucket_ts;
 
     int configured_point_count;
     int point_count;
@@ -69,7 +89,10 @@ typedef struct {
     bool unavailable;
 } w_graph_ctx_t;
 
+static const char *TAG = "w_graph";
 static bool s_graph_history_dir_ready = false;
+static QueueHandle_t s_graph_persist_queue = NULL;
+static TaskHandle_t s_graph_persist_task = NULL;
 
 static bool graph_state_is_unavailable(const char *state_text)
 {
@@ -401,13 +424,13 @@ static esp_err_t graph_history_load(w_graph_ctx_t *ctx)
     return ESP_OK;
 }
 
-static esp_err_t graph_history_save(const w_graph_ctx_t *ctx)
+static esp_err_t graph_history_save_buffer(const char *history_path, const graph_sample_t *history, int history_count)
 {
-    if (ctx == NULL || ctx->history_path[0] == '\0') {
+    if (history_path == NULL || history_path[0] == '\0' || history_count < 0 || history_count > GRAPH_HISTORY_MAX_SAMPLES) {
         return ESP_ERR_INVALID_ARG;
     }
 
-    FILE *f = fopen(ctx->history_path, "wb");
+    FILE *f = fopen(history_path, "wb");
     if (f == NULL) {
         return ESP_FAIL;
     }
@@ -416,7 +439,7 @@ static esp_err_t graph_history_save(const w_graph_ctx_t *ctx)
         .magic = GRAPH_HISTORY_FILE_MAGIC,
         .version = GRAPH_HISTORY_FILE_VERSION,
         .reserved = 0U,
-        .count = (uint32_t)ctx->history_count,
+        .count = (uint32_t)history_count,
     };
 
     size_t written = fwrite(&header, 1U, sizeof(header), f);
@@ -425,9 +448,9 @@ static esp_err_t graph_history_save(const w_graph_ctx_t *ctx)
         return ESP_FAIL;
     }
 
-    if (ctx->history_count > 0) {
-        written = fwrite(ctx->history, sizeof(ctx->history[0]), (size_t)ctx->history_count, f);
-        if (written != (size_t)ctx->history_count) {
+    if (history_count > 0) {
+        written = fwrite(history, sizeof(graph_sample_t), (size_t)history_count, f);
+        if (written != (size_t)history_count) {
             fclose(f);
             return ESP_FAIL;
         }
@@ -437,8 +460,134 @@ static esp_err_t graph_history_save(const w_graph_ctx_t *ctx)
     return ESP_OK;
 }
 
-static bool graph_history_append_or_update(w_graph_ctx_t *ctx, uint32_t bucket_ts, float value)
+static void graph_persist_task(void *arg)
 {
+    (void)arg;
+    while (true) {
+        graph_history_persist_job_t *job = NULL;
+        if (xQueueReceive(s_graph_persist_queue, &job, portMAX_DELAY) != pdTRUE) {
+            continue;
+        }
+        if (job == NULL) {
+            continue;
+        }
+
+        esp_err_t err = graph_history_save_buffer(job->history_path, job->history, job->history_count);
+        if (err != ESP_OK) {
+            ESP_LOGW(TAG, "async history save failed (%s, count=%d): %s",
+                job->history_path, job->history_count, esp_err_to_name(err));
+        }
+        free(job);
+    }
+}
+
+static void graph_persist_start_once(void)
+{
+    if (s_graph_persist_queue != NULL && s_graph_persist_task != NULL) {
+        return;
+    }
+
+    if (s_graph_persist_queue == NULL) {
+        s_graph_persist_queue = xQueueCreate(GRAPH_HISTORY_PERSIST_QUEUE_LEN, sizeof(graph_history_persist_job_t *));
+        if (s_graph_persist_queue == NULL) {
+            ESP_LOGW(TAG, "failed to create graph persist queue");
+            return;
+        }
+    }
+
+    if (s_graph_persist_task == NULL) {
+        BaseType_t created = xTaskCreate(graph_persist_task, "graph_persist", GRAPH_HISTORY_PERSIST_TASK_STACK, NULL,
+            GRAPH_HISTORY_PERSIST_TASK_PRIO, &s_graph_persist_task);
+        if (created != pdPASS) {
+            ESP_LOGW(TAG, "failed to start graph persist task");
+            vQueueDelete(s_graph_persist_queue);
+            s_graph_persist_queue = NULL;
+            return;
+        }
+    }
+}
+
+static bool graph_history_enqueue_persist(const w_graph_ctx_t *ctx, uint32_t bucket_ts)
+{
+    if (ctx == NULL || ctx->history_path[0] == '\0') {
+        return false;
+    }
+
+    graph_persist_start_once();
+    if (s_graph_persist_queue == NULL) {
+        return false;
+    }
+
+    graph_history_persist_job_t *job =
+        heap_caps_malloc(sizeof(graph_history_persist_job_t), MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    if (job == NULL) {
+        job = malloc(sizeof(graph_history_persist_job_t));
+    }
+    if (job == NULL) {
+        ESP_LOGW(TAG, "failed to allocate graph persist job");
+        return false;
+    }
+
+    memset(job, 0, sizeof(*job));
+    snprintf(job->history_path, sizeof(job->history_path), "%s", ctx->history_path);
+    job->bucket_ts = bucket_ts;
+    job->history_count = ctx->history_count;
+    if (job->history_count > GRAPH_HISTORY_MAX_SAMPLES) {
+        job->history_count = GRAPH_HISTORY_MAX_SAMPLES;
+    }
+    if (job->history_count > 0) {
+        memcpy(job->history, ctx->history, (size_t)job->history_count * sizeof(job->history[0]));
+    }
+
+    if (xQueueSend(s_graph_persist_queue, &job, 0) != pdTRUE) {
+        graph_history_persist_job_t *dropped = NULL;
+        if (xQueueReceive(s_graph_persist_queue, &dropped, 0) == pdTRUE && dropped != NULL) {
+            free(dropped);
+        }
+        if (xQueueSend(s_graph_persist_queue, &job, 0) != pdTRUE) {
+            ESP_LOGW(TAG, "graph persist queue full, dropping snapshot");
+            free(job);
+            return false;
+        }
+    }
+
+    return true;
+}
+
+static void graph_history_try_persist(w_graph_ctx_t *ctx, uint32_t bucket_ts, bool force)
+{
+    if (ctx == NULL || ctx->history_path[0] == '\0' || !ctx->history_dirty) {
+        return;
+    }
+
+    if (!force) {
+        if (GRAPH_HISTORY_SAVE_INTERVAL_SEC == 0U || bucket_ts == 0U) {
+            return;
+        }
+
+        if (ctx->last_persist_bucket_ts != 0U) {
+            uint32_t elapsed = (bucket_ts >= ctx->last_persist_bucket_ts) ? (bucket_ts - ctx->last_persist_bucket_ts) : 0U;
+            if (elapsed < GRAPH_HISTORY_SAVE_INTERVAL_SEC) {
+                return;
+            }
+        }
+    }
+
+    if (graph_history_enqueue_persist(ctx, bucket_ts)) {
+        ctx->history_dirty = false;
+        if (bucket_ts != 0U) {
+            ctx->last_persist_bucket_ts = bucket_ts;
+        } else if (ctx->history_count > 0) {
+            ctx->last_persist_bucket_ts = ctx->history[ctx->history_count - 1].bucket_ts;
+        }
+    }
+}
+
+static bool graph_history_append_or_update(w_graph_ctx_t *ctx, uint32_t bucket_ts, float value, bool *out_appended)
+{
+    if (out_appended != NULL) {
+        *out_appended = false;
+    }
     if (ctx == NULL || bucket_ts == 0U) {
         return false;
     }
@@ -446,8 +595,15 @@ static bool graph_history_append_or_update(w_graph_ctx_t *ctx, uint32_t bucket_t
     if (ctx->history_count > 0) {
         graph_sample_t *last = &ctx->history[ctx->history_count - 1];
         if (last->bucket_ts == bucket_ts) {
+            float delta = last->value - value;
+            if (delta < 0.0f) {
+                delta = -delta;
+            }
+            if (delta < 0.0001f) {
+                return false;
+            }
             last->value = value;
-            return false;
+            return true;
         }
         if (bucket_ts < last->bucket_ts) {
             return false;
@@ -461,6 +617,9 @@ static bool graph_history_append_or_update(w_graph_ctx_t *ctx, uint32_t bucket_t
     ctx->history[ctx->history_count].value = value;
     ctx->history_count++;
     graph_history_trim_retention(ctx, bucket_ts);
+    if (out_appended != NULL) {
+        *out_appended = true;
+    }
     return true;
 }
 
@@ -781,6 +940,7 @@ static void w_graph_event_cb(lv_event_t *event)
 
     lv_event_code_t code = lv_event_get_code(event);
     if (code == LV_EVENT_DELETE) {
+        graph_history_try_persist(ctx, graph_display_now_bucket_ts(ctx), true);
         free(ctx);
     } else if (code == LV_EVENT_SIZE_CHANGED) {
         graph_apply_layout(ctx);
@@ -813,17 +973,17 @@ esp_err_t w_graph_create(const ui_widget_def_t *def, lv_obj_t *parent, ui_widget
     lv_obj_t *title = lv_label_create(card);
     lv_label_set_text(title, def->title[0] ? def->title : def->id);
     lv_obj_set_style_text_color(title, theme_default_color_text_muted(), LV_PART_MAIN);
-    lv_obj_set_style_text_font(title, LV_FONT_DEFAULT, LV_PART_MAIN);
+    lv_obj_set_style_text_font(title, APP_FONT_TEXT_20, LV_PART_MAIN);
 
     lv_obj_t *value = lv_label_create(card);
     lv_label_set_text(value, "--");
     lv_obj_set_style_text_color(value, theme_default_color_text_primary(), LV_PART_MAIN);
-    lv_obj_set_style_text_font(value, LV_FONT_DEFAULT, LV_PART_MAIN);
+    lv_obj_set_style_text_font(value, APP_FONT_TEXT_20, LV_PART_MAIN);
 
     lv_obj_t *meta = lv_label_create(card);
     lv_label_set_text(meta, "");
     lv_obj_set_style_text_color(meta, theme_default_color_text_muted(), LV_PART_MAIN);
-    lv_obj_set_style_text_font(meta, LV_FONT_DEFAULT, LV_PART_MAIN);
+    lv_obj_set_style_text_font(meta, APP_FONT_TEXT_20, LV_PART_MAIN);
 
     lv_obj_t *chart = lv_chart_create(card);
     lv_obj_clear_flag(chart, LV_OBJ_FLAG_SCROLLABLE);
@@ -852,6 +1012,8 @@ esp_err_t w_graph_create(const ui_widget_def_t *def, lv_obj_t *parent, ui_widget
     ctx->meta_label = meta;
     ctx->chart = chart;
     ctx->history_count = 0;
+    ctx->history_dirty = false;
+    ctx->last_persist_bucket_ts = 0U;
     ctx->configured_point_count = graph_clamp_point_count(def->graph_point_count);
     ctx->point_count = (ctx->configured_point_count > 0) ? ctx->configured_point_count : GRAPH_DEFAULT_POINT_COUNT;
     ctx->time_window_min = graph_clamp_time_window_min(def->graph_time_window_min);
@@ -866,6 +1028,9 @@ esp_err_t w_graph_create(const ui_widget_def_t *def, lv_obj_t *parent, ui_widget
     graph_build_history_path(def->id, ctx->history_path, sizeof(ctx->history_path));
     if (ctx->history_path[0] != '\0') {
         (void)graph_history_load(ctx);
+        if (ctx->history_count > 0) {
+            ctx->last_persist_bucket_ts = ctx->history[ctx->history_count - 1].bucket_ts;
+        }
     }
 
     lv_chart_set_point_count(chart, (uint32_t)ctx->point_count);
@@ -899,9 +1064,10 @@ void w_graph_apply_state(ui_widget_instance_t *instance, const ha_state_t *state
         return;
     }
 
+    bool was_unavailable = ctx->unavailable;
+
     if (graph_state_is_unavailable(state->state)) {
         graph_apply_unavailable(ctx);
-        graph_apply_layout(ctx);
         return;
     }
 
@@ -926,8 +1092,9 @@ void w_graph_apply_state(ui_widget_instance_t *instance, const ha_state_t *state
 
     if (!parsed) {
         lv_label_set_text(ctx->value_label, state->state);
-        graph_rebuild_chart(ctx);
-        graph_apply_layout(ctx);
+        if (was_unavailable) {
+            graph_rebuild_chart(ctx);
+        }
         return;
     }
 
@@ -936,12 +1103,15 @@ void w_graph_apply_state(ui_widget_instance_t *instance, const ha_state_t *state
     lv_label_set_text(ctx->value_label, value_text);
 
     uint32_t bucket_ts = graph_current_bucket_ts();
-    bool appended = graph_history_append_or_update(ctx, bucket_ts, numeric);
-    if (appended) {
-        (void)graph_history_save(ctx);
+    bool history_changed = graph_history_append_or_update(ctx, bucket_ts, numeric, NULL);
+    if (history_changed) {
+        ctx->history_dirty = true;
+        graph_history_try_persist(ctx, bucket_ts, false);
     }
 
-    graph_apply_layout(ctx);
+    if (was_unavailable || history_changed) {
+        graph_rebuild_chart(ctx);
+    }
 }
 
 void w_graph_mark_unavailable(ui_widget_instance_t *instance)
@@ -956,5 +1126,4 @@ void w_graph_mark_unavailable(ui_widget_instance_t *instance)
     }
 
     graph_apply_unavailable(ctx);
-    graph_apply_layout(ctx);
 }

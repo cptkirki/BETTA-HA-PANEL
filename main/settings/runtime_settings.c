@@ -113,6 +113,7 @@ static esp_err_t write_public_settings_file(const runtime_settings_t *settings)
 
     cJSON_AddStringToObject(wifi, "ssid", settings->wifi_ssid);
     cJSON_AddStringToObject(wifi, "country_code", settings->wifi_country_code);
+    cJSON_AddStringToObject(wifi, "bssid", settings->wifi_bssid);
     cJSON_AddItemToObject(root, "wifi", wifi);
 
     cJSON_AddStringToObject(ha, "ws_url", settings->ha_ws_url);
@@ -181,6 +182,7 @@ static esp_err_t parse_settings_json(
     if (cJSON_IsObject(wifi)) {
         json_copy_string(wifi, "ssid", out->wifi_ssid, sizeof(out->wifi_ssid));
         json_copy_string(wifi, "country_code", out->wifi_country_code, sizeof(out->wifi_country_code));
+        json_copy_string(wifi, "bssid", out->wifi_bssid, sizeof(out->wifi_bssid));
         cJSON *pwd = cJSON_GetObjectItemCaseSensitive(wifi, "password");
         if (pwd != NULL) {
             if (out_legacy_wifi_password != NULL) {
@@ -193,6 +195,7 @@ static esp_err_t parse_settings_json(
     } else {
         json_copy_string(root, "wifi_ssid", out->wifi_ssid, sizeof(out->wifi_ssid));
         json_copy_string(root, "wifi_country_code", out->wifi_country_code, sizeof(out->wifi_country_code));
+        json_copy_string(root, "wifi_bssid", out->wifi_bssid, sizeof(out->wifi_bssid));
         cJSON *pwd = cJSON_GetObjectItemCaseSensitive(root, "wifi_password");
         if (pwd != NULL) {
             if (out_legacy_wifi_password != NULL) {

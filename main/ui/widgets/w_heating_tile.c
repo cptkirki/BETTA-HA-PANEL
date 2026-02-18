@@ -7,30 +7,21 @@
 
 #include "cJSON.h"
 
+#include "ui/fonts/app_text_fonts.h"
 #include "ui/ui_bindings.h"
 #include "ui/ui_i18n.h"
 #include "ui/theme/theme_default.h"
 
-#if LV_FONT_MONTSERRAT_34
-#define HEATING_ACTUAL_FONT (&lv_font_montserrat_34)
-#elif LV_FONT_MONTSERRAT_32
-#define HEATING_ACTUAL_FONT (&lv_font_montserrat_32)
-#elif LV_FONT_MONTSERRAT_28
-#define HEATING_ACTUAL_FONT (&lv_font_montserrat_28)
-#elif LV_FONT_MONTSERRAT_24
-#define HEATING_ACTUAL_FONT (&lv_font_montserrat_24)
-#else
-#define HEATING_ACTUAL_FONT LV_FONT_DEFAULT
-#endif
+#define HEATING_ACTUAL_FONT APP_FONT_DISPLAY_38
 
 #if LV_FONT_MONTSERRAT_20
-#define HEATING_TARGET_FONT (&lv_font_montserrat_20)
+#define HEATING_TARGET_FONT APP_FONT_TEXT_16
 #elif LV_FONT_MONTSERRAT_18
-#define HEATING_TARGET_FONT (&lv_font_montserrat_18)
+#define HEATING_TARGET_FONT APP_FONT_TEXT_16
 #elif LV_FONT_MONTSERRAT_16
-#define HEATING_TARGET_FONT (&lv_font_montserrat_16)
+#define HEATING_TARGET_FONT APP_FONT_TEXT_16
 #else
-#define HEATING_TARGET_FONT LV_FONT_DEFAULT
+#define HEATING_TARGET_FONT APP_FONT_TEXT_16
 #endif
 
 typedef struct {
@@ -486,7 +477,7 @@ esp_err_t w_heating_tile_create(const ui_widget_def_t *def, lv_obj_t *parent, ui
     lv_obj_t *title = lv_label_create(card);
     lv_label_set_text(title, def->title[0] ? def->title : def->id);
     lv_obj_set_width(title, def->w - 32);
-    lv_obj_set_style_text_font(title, LV_FONT_DEFAULT, LV_PART_MAIN);
+    lv_obj_set_style_text_font(title, APP_FONT_TEXT_16, LV_PART_MAIN);
     lv_obj_set_style_text_align(title, LV_TEXT_ALIGN_CENTER, LV_PART_MAIN);
 #if APP_UI_TILE_LAYOUT_TUNED
     lv_obj_align(title, LV_ALIGN_TOP_MID, 0, 2);
@@ -526,7 +517,7 @@ esp_err_t w_heating_tile_create(const ui_widget_def_t *def, lv_obj_t *parent, ui
 
     lv_obj_t *status_label = lv_label_create(card);
     lv_label_set_text(status_label, ui_i18n_get("common.off", "OFF"));
-    lv_obj_set_style_text_font(status_label, LV_FONT_DEFAULT, LV_PART_MAIN);
+    lv_obj_set_style_text_font(status_label, APP_FONT_TEXT_14, LV_PART_MAIN);
     lv_obj_set_style_text_align(status_label, LV_TEXT_ALIGN_CENTER, LV_PART_MAIN);
     lv_obj_align(status_label, LV_ALIGN_BOTTOM_MID, 0, -12);
 

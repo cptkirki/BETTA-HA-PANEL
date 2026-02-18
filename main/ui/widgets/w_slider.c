@@ -8,6 +8,7 @@
 
 #include "cJSON.h"
 
+#include "ui/fonts/app_text_fonts.h"
 #include "ui/theme/theme_default.h"
 #include "ui/ui_i18n.h"
 #include "ui/ui_bindings.h"
@@ -554,18 +555,18 @@ esp_err_t w_slider_create(const ui_widget_def_t *def, lv_obj_t *parent, ui_widge
     lv_obj_t *title = lv_label_create(card);
     lv_label_set_text(title, def->title[0] ? def->title : def->id);
     lv_obj_set_width(title, def->w - 32);
-    lv_obj_set_style_text_font(title, LV_FONT_DEFAULT, LV_PART_MAIN);
+    lv_obj_set_style_text_font(title, APP_FONT_TEXT_20, LV_PART_MAIN);
     lv_obj_set_style_text_align(title, LV_TEXT_ALIGN_CENTER, LV_PART_MAIN);
     lv_obj_align(title, LV_ALIGN_BOTTOM_MID, 0, APP_UI_TILE_LAYOUT_TUNED ? -12 : -10);
 
     lv_obj_t *state = lv_label_create(card);
     lv_label_set_text(state, ui_i18n_get("common.off", "OFF"));
-    lv_obj_set_style_text_font(state, LV_FONT_DEFAULT, LV_PART_MAIN);
+    lv_obj_set_style_text_font(state, APP_FONT_TEXT_20, LV_PART_MAIN);
     lv_obj_align(state, LV_ALIGN_TOP_LEFT, 0, APP_UI_TILE_LAYOUT_TUNED ? 2 : 0);
 
     lv_obj_t *value = lv_label_create(card);
     slider_set_value_label(value, 0);
-    lv_obj_set_style_text_font(value, LV_FONT_DEFAULT, LV_PART_MAIN);
+    lv_obj_set_style_text_font(value, APP_FONT_TEXT_20, LV_PART_MAIN);
     lv_obj_align(value, LV_ALIGN_TOP_RIGHT, 0, APP_UI_TILE_LAYOUT_TUNED ? 2 : 0);
 
     lv_obj_t *slider = lv_slider_create(card);

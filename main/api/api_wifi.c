@@ -1,6 +1,7 @@
 #include "api/api_routes.h"
 
 #include <stdbool.h>
+#include <stdio.h>
 #include <stdlib.h>
 
 #include "cJSON.h"
@@ -10,6 +11,23 @@
 #include "net/wifi_mgr.h"
 
 #define WIFI_SCAN_MAX_RESULTS 40
+
+static void format_bssid(const uint8_t bssid[6], char *out, size_t out_len)
+{
+    if (bssid == NULL || out == NULL || out_len < 18U) {
+        return;
+    }
+    snprintf(
+        out,
+        out_len,
+        "%02X:%02X:%02X:%02X:%02X:%02X",
+        bssid[0],
+        bssid[1],
+        bssid[2],
+        bssid[3],
+        bssid[4],
+        bssid[5]);
+}
 
 static void set_json_headers(httpd_req_t *req)
 {
@@ -153,6 +171,11 @@ esp_err_t api_wifi_scan_get_handler(httpd_req_t *req)
         cJSON_AddStringToObject(entry, "ssid", results[i].ssid);
         cJSON_AddNumberToObject(entry, "rssi", (double)results[i].rssi);
         cJSON_AddStringToObject(entry, "authmode", authmode_to_string(results[i].authmode));
+        cJSON_AddNumberToObject(entry, "channel", (double)results[i].channel);
+        char bssid[18] = {0};
+        format_bssid(results[i].bssid, bssid, sizeof(bssid));
+        cJSON_AddStringToObject(entry, "bssid", bssid);
+        cJSON_AddBoolToObject(entry, "connected", results[i].connected);
         cJSON_AddBoolToObject(entry, "secure", authmode_is_secure(results[i].authmode));
         cJSON_AddItemToArray(items, entry);
     }

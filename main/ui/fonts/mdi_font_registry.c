@@ -28,14 +28,6 @@
 #define APP_HAVE_MDI_TOP50_FONT_LEGACY 0
 #endif
 
-#ifndef APP_HAVE_MDI_WEATHER_FONT_100
-#define APP_HAVE_MDI_WEATHER_FONT_100 0
-#endif
-
-#ifndef APP_HAVE_MDI_WEATHER_FONT_120
-#define APP_HAVE_MDI_WEATHER_FONT_120 0
-#endif
-
 #ifndef APP_HAVE_MDI_WEATHER_FONT_20
 #define APP_HAVE_MDI_WEATHER_FONT_20 0
 #endif
@@ -60,33 +52,69 @@ LV_FONT_DECLARE(mdi_standard_icons_56);
 #endif
 #endif
 
-#if APP_HAVE_MDI_WEATHER_FONT_100
-LV_FONT_DECLARE(mdiweatherIcons100);
-#endif
-
-#if APP_HAVE_MDI_WEATHER_FONT_120
-LV_FONT_DECLARE(mdiweatherIcons120);
-#endif
-
 #if APP_HAVE_MDI_WEATHER_FONT_20
 LV_FONT_DECLARE(mdiweatherIcons20);
 #endif
+
+const lv_font_t *mdi_font_icon_42(void)
+{
+#if APP_HAVE_MDI_ICON_FONT && APP_HAVE_MDI_TOP50_FONT && APP_HAVE_MDI_TOP50_FONT_42
+    return &mditop50icons42;
+#else
+    return NULL;
+#endif
+}
+
+bool mdi_font_icon_42_available(void)
+{
+    return mdi_font_icon_42() != NULL;
+}
+
+const lv_font_t *mdi_font_icon_56(void)
+{
+#if APP_HAVE_MDI_ICON_FONT && APP_HAVE_MDI_TOP50_FONT && APP_HAVE_MDI_TOP50_FONT_56
+    return &mditop50icons56;
+#elif APP_HAVE_MDI_STANDARD_FONT
+    return &mdi_standard_icons_56;
+#else
+    return NULL;
+#endif
+}
+
+bool mdi_font_icon_56_available(void)
+{
+    return mdi_font_icon_56() != NULL;
+}
+
+const lv_font_t *mdi_font_icon_72(void)
+{
+#if APP_HAVE_MDI_ICON_FONT && APP_HAVE_MDI_TOP50_FONT && APP_HAVE_MDI_TOP50_FONT_72
+    return &mditop50icons72;
+#else
+    return NULL;
+#endif
+}
+
+bool mdi_font_icon_72_available(void)
+{
+    return mdi_font_icon_72() != NULL;
+}
 
 const lv_font_t *mdi_font_large(void)
 {
 #if APP_HAVE_MDI_ICON_FONT
 #if APP_HAVE_MDI_TOP50_FONT
-#if APP_HAVE_MDI_TOP50_FONT_56
-    return &mditop50icons56;
+#if APP_HAVE_MDI_TOP50_FONT_56 || APP_HAVE_MDI_STANDARD_FONT
+    return mdi_font_icon_56();
 #elif APP_HAVE_MDI_TOP50_FONT_72
-    return &mditop50icons72;
+    return mdi_font_icon_72();
 #elif APP_HAVE_MDI_TOP50_FONT_LEGACY
     return &mditop50icons;
 #else
     return NULL;
 #endif
 #elif APP_HAVE_MDI_STANDARD_FONT
-    return &mdi_standard_icons_56;
+    return mdi_font_icon_56();
 #else
     return NULL;
 #endif
@@ -98,34 +126,6 @@ const lv_font_t *mdi_font_large(void)
 bool mdi_font_large_available(void)
 {
     return mdi_font_large() != NULL;
-}
-
-const lv_font_t *mdi_font_weather_100(void)
-{
-#if APP_HAVE_MDI_WEATHER_FONT_100
-    return &mdiweatherIcons100;
-#else
-    return NULL;
-#endif
-}
-
-bool mdi_font_weather_100_available(void)
-{
-    return mdi_font_weather_100() != NULL;
-}
-
-const lv_font_t *mdi_font_weather_120(void)
-{
-#if APP_HAVE_MDI_WEATHER_FONT_120
-    return &mdiweatherIcons120;
-#else
-    return NULL;
-#endif
-}
-
-bool mdi_font_weather_120_available(void)
-{
-    return mdi_font_weather_120() != NULL;
 }
 
 const lv_font_t *mdi_font_weather_20(void)
@@ -149,11 +149,11 @@ const lv_font_t *mdi_font_weather_small(void)
 #endif
 #if APP_HAVE_MDI_ICON_FONT && APP_HAVE_MDI_TOP50_FONT
 #if APP_HAVE_MDI_TOP50_FONT_42
-    return &mditop50icons42;
+    return mdi_font_icon_42();
 #elif APP_HAVE_MDI_TOP50_FONT_56
-    return &mditop50icons56;
+    return mdi_font_icon_56();
 #elif APP_HAVE_MDI_TOP50_FONT_72
-    return &mditop50icons72;
+    return mdi_font_icon_72();
 #else
     return mdi_font_large();
 #endif
@@ -170,7 +170,7 @@ bool mdi_font_weather_small_available(void)
 const lv_font_t *mdi_font_weather(void)
 {
 #if APP_HAVE_MDI_ICON_FONT && APP_HAVE_MDI_TOP50_FONT && APP_HAVE_MDI_TOP50_FONT_72
-    return &mditop50icons72;
+    return mdi_font_icon_72();
 #else
     return mdi_font_large();
 #endif

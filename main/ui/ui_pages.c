@@ -6,6 +6,7 @@
 #include <time.h>
 
 #include "app_config.h"
+#include "ui/fonts/app_text_fonts.h"
 #include "ui/ui_i18n.h"
 #include "ui/theme/theme_default.h"
 
@@ -33,25 +34,9 @@ static lv_obj_t *s_nav_extra_buttons[APP_MAX_PAGES - 1] = {0};
 static lv_obj_t *s_nav_extra_labels[APP_MAX_PAGES - 1] = {0};
 static uint16_t s_nav_extra_page_index[APP_MAX_PAGES - 1] = {0};
 
-#if LV_FONT_MONTSERRAT_34
-#define TOPBAR_TIME_FONT (&lv_font_montserrat_34)
-#elif LV_FONT_MONTSERRAT_28
-#define TOPBAR_TIME_FONT (&lv_font_montserrat_28)
-#elif LV_FONT_MONTSERRAT_24
-#define TOPBAR_TIME_FONT (&lv_font_montserrat_24)
-#else
-#define TOPBAR_TIME_FONT LV_FONT_DEFAULT
-#endif
+#define TOPBAR_TIME_FONT APP_FONT_TEXT_34
 
-#if LV_FONT_MONTSERRAT_22
-#define TOPBAR_DATE_FONT (&lv_font_montserrat_22)
-#elif LV_FONT_MONTSERRAT_20
-#define TOPBAR_DATE_FONT (&lv_font_montserrat_20)
-#elif LV_FONT_MONTSERRAT_18
-#define TOPBAR_DATE_FONT (&lv_font_montserrat_18)
-#else
-#define TOPBAR_DATE_FONT TOPBAR_TIME_FONT
-#endif
+#define TOPBAR_DATE_FONT APP_FONT_TEXT_22
 
 #if LV_FONT_MONTSERRAT_24
 #define TOPBAR_ICON_FONT (&lv_font_montserrat_24)
@@ -61,13 +46,7 @@ static uint16_t s_nav_extra_page_index[APP_MAX_PAGES - 1] = {0};
 #define TOPBAR_ICON_FONT LV_FONT_DEFAULT
 #endif
 
-#if LV_FONT_MONTSERRAT_20
-#define NAV_TEXT_FONT (&lv_font_montserrat_20)
-#elif LV_FONT_MONTSERRAT_18
-#define NAV_TEXT_FONT (&lv_font_montserrat_18)
-#else
-#define NAV_TEXT_FONT LV_FONT_DEFAULT
-#endif
+#define NAV_TEXT_FONT APP_FONT_TEXT_16
 
 static void ui_pages_style_nav_button(lv_obj_t *btn, lv_obj_t *label, bool selected, bool is_home)
 {

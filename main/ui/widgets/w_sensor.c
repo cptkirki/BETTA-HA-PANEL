@@ -8,25 +8,26 @@
 #include "cJSON.h"
 #include "esp_timer.h"
 
+#include "ui/fonts/app_text_fonts.h"
 #include "ui/ui_i18n.h"
 #include "ui/theme/theme_default.h"
 
 #if LV_FONT_MONTSERRAT_24
-#define SENSOR_VALUE_FONT_SMALL (&lv_font_montserrat_24)
+#define SENSOR_VALUE_FONT_SMALL APP_FONT_TEXT_24
 #elif LV_FONT_MONTSERRAT_22
-#define SENSOR_VALUE_FONT_SMALL (&lv_font_montserrat_22)
+#define SENSOR_VALUE_FONT_SMALL APP_FONT_TEXT_22
 #elif LV_FONT_MONTSERRAT_20
-#define SENSOR_VALUE_FONT_SMALL (&lv_font_montserrat_20)
+#define SENSOR_VALUE_FONT_SMALL APP_FONT_TEXT_20
 #else
-#define SENSOR_VALUE_FONT_SMALL LV_FONT_DEFAULT
+#define SENSOR_VALUE_FONT_SMALL APP_FONT_TEXT_20
 #endif
 
 #if LV_FONT_MONTSERRAT_32
 #define SENSOR_VALUE_FONT_MEDIUM (&lv_font_montserrat_32)
 #elif LV_FONT_MONTSERRAT_28
-#define SENSOR_VALUE_FONT_MEDIUM (&lv_font_montserrat_28)
+#define SENSOR_VALUE_FONT_MEDIUM APP_FONT_TEXT_28
 #elif LV_FONT_MONTSERRAT_24
-#define SENSOR_VALUE_FONT_MEDIUM (&lv_font_montserrat_24)
+#define SENSOR_VALUE_FONT_MEDIUM APP_FONT_TEXT_24
 #else
 #define SENSOR_VALUE_FONT_MEDIUM SENSOR_VALUE_FONT_SMALL
 #endif
@@ -38,7 +39,7 @@
 #elif LV_FONT_MONTSERRAT_36
 #define SENSOR_VALUE_FONT_LARGE (&lv_font_montserrat_36)
 #elif LV_FONT_MONTSERRAT_34
-#define SENSOR_VALUE_FONT_LARGE (&lv_font_montserrat_34)
+#define SENSOR_VALUE_FONT_LARGE APP_FONT_TEXT_34
 #elif LV_FONT_MONTSERRAT_32
 #define SENSOR_VALUE_FONT_LARGE (&lv_font_montserrat_32)
 #else
@@ -62,7 +63,7 @@
 #elif LV_FONT_MONTSERRAT_16
 #define SENSOR_META_FONT (&lv_font_montserrat_16)
 #else
-#define SENSOR_META_FONT LV_FONT_DEFAULT
+#define SENSOR_META_FONT APP_FONT_TEXT_14
 #endif
 
 typedef struct {
@@ -290,7 +291,7 @@ esp_err_t w_sensor_create(const ui_widget_def_t *def, lv_obj_t *parent, ui_widge
     lv_obj_t *title = lv_label_create(card);
     lv_label_set_text(title, def->title[0] ? def->title : def->id);
     lv_obj_set_style_text_color(title, theme_default_color_text_muted(), LV_PART_MAIN);
-    lv_obj_set_style_text_font(title, LV_FONT_DEFAULT, LV_PART_MAIN);
+    lv_obj_set_style_text_font(title, APP_FONT_TEXT_20, LV_PART_MAIN);
 
     lv_obj_t *value = lv_label_create(card);
     lv_label_set_text(value, "--");

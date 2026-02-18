@@ -139,6 +139,49 @@ static void wifi_mgr_set_country_code_from_input(const char *country_code)
     strlcpy(s_wifi_country_code, normalized, sizeof(s_wifi_country_code));
 }
 
+static int wifi_mgr_hex_nibble(char c)
+{
+    if (c >= '0' && c <= '9') {
+        return c - '0';
+    }
+    if (c >= 'a' && c <= 'f') {
+        return 10 + (c - 'a');
+    }
+    if (c >= 'A' && c <= 'F') {
+        return 10 + (c - 'A');
+    }
+    return -1;
+}
+
+static bool wifi_mgr_parse_bssid(const char *text, uint8_t out[6])
+{
+    if (text == NULL || out == NULL) {
+        return false;
+    }
+    if (strlen(text) != 17U) {
+        return false;
+    }
+
+    char sep = text[2];
+    if (sep != ':' && sep != '-') {
+        return false;
+    }
+
+    for (size_t i = 0; i < 6; i++) {
+        size_t idx = i * 3;
+        int hi = wifi_mgr_hex_nibble(text[idx]);
+        int lo = wifi_mgr_hex_nibble(text[idx + 1]);
+        if (hi < 0 || lo < 0) {
+            return false;
+        }
+        out[i] = (uint8_t)((hi << 4) | lo);
+        if (i < 5 && text[idx + 2] != sep) {
+            return false;
+        }
+    }
+    return true;
+}
+
 static esp_err_t wifi_mgr_apply_country_code(void)
 {
     if (s_wifi_country_code[0] == '\0') {
@@ -900,6 +943,18 @@ esp_err_t wifi_mgr_init(const wifi_mgr_config_t *cfg)
     wifi_config_t wifi_cfg = {0};
     strlcpy((char *)wifi_cfg.sta.ssid, cfg->ssid, sizeof(wifi_cfg.sta.ssid));
     strlcpy((char *)wifi_cfg.sta.password, cfg->password ? cfg->password : "", sizeof(wifi_cfg.sta.password));
+    wifi_cfg.sta.bssid_set = false;
+    if (cfg->bssid != NULL && cfg->bssid[0] != '\0') {
+        uint8_t bssid[6] = {0};
+        if (wifi_mgr_parse_bssid(cfg->bssid, bssid)) {
+            memcpy(wifi_cfg.sta.bssid, bssid, sizeof(bssid));
+            wifi_cfg.sta.bssid_set = true;
+            ESP_LOGI(TAG_WIFI, "Wi-Fi BSSID lock enabled: %02X:%02X:%02X:%02X:%02X:%02X",
+                bssid[0], bssid[1], bssid[2], bssid[3], bssid[4], bssid[5]);
+        } else {
+            ESP_LOGW(TAG_WIFI, "Ignoring invalid Wi-Fi BSSID lock value: %s", cfg->bssid);
+        }
+    }
     wifi_cfg.sta.threshold.authmode =
         (cfg->password != NULL && cfg->password[0] != '\0') ? WIFI_AUTH_WPA2_PSK : WIFI_AUTH_OPEN;
     wifi_cfg.sta.pmf_cfg.capable = true;
@@ -1227,6 +1282,32 @@ esp_err_t wifi_mgr_get_ap_ip(char *out, size_t out_len)
 #endif
 }
 
+esp_err_t wifi_mgr_get_sta_ap_info(wifi_mgr_sta_ap_info_t *out_info)
+{
+#if !SOC_WIFI_SUPPORTED && !CONFIG_ESP_HOSTED_ENABLED
+    (void)out_info;
+    return ESP_ERR_NOT_SUPPORTED;
+#else
+    if (out_info == NULL) {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    wifi_ap_record_t ap_info = {0};
+    esp_err_t err = esp_wifi_sta_get_ap_info(&ap_info);
+    if (err != ESP_OK) {
+        return err;
+    }
+
+    memset(out_info, 0, sizeof(*out_info));
+    strlcpy(out_info->ssid, (const char *)ap_info.ssid, sizeof(out_info->ssid));
+    out_info->rssi = ap_info.rssi;
+    out_info->authmode = (uint8_t)ap_info.authmode;
+    out_info->channel = ap_info.primary;
+    memcpy(out_info->bssid, ap_info.bssid, sizeof(out_info->bssid));
+    return ESP_OK;
+#endif
+}
+
 esp_err_t wifi_mgr_get_sta_rssi(int8_t *out_rssi_dbm)
 {
 #if !SOC_WIFI_SUPPORTED && !CONFIG_ESP_HOSTED_ENABLED
@@ -1237,8 +1318,8 @@ esp_err_t wifi_mgr_get_sta_rssi(int8_t *out_rssi_dbm)
         return ESP_ERR_INVALID_ARG;
     }
 
-    wifi_ap_record_t ap_info = {0};
-    esp_err_t err = esp_wifi_sta_get_ap_info(&ap_info);
+    wifi_mgr_sta_ap_info_t ap_info = {0};
+    esp_err_t err = wifi_mgr_get_sta_ap_info(&ap_info);
     if (err != ESP_OK) {
         return err;
     }
@@ -1384,6 +1465,9 @@ esp_err_t wifi_mgr_scan(wifi_mgr_scan_result_t *results, size_t max_results, siz
             goto cleanup;
         }
 
+        wifi_ap_record_t connected_ap = {0};
+        bool has_connected_ap = (esp_wifi_sta_get_ap_info(&connected_ap) == ESP_OK);
+
         uint16_t fetch_count = found;
         err = esp_wifi_scan_get_ap_records(&fetch_count, records);
         if (err == ESP_OK) {
@@ -1394,7 +1478,7 @@ esp_err_t wifi_mgr_scan(wifi_mgr_scan_result_t *results, size_t max_results, siz
                 }
                 bool duplicate = false;
                 for (size_t j = 0; j < out_idx; j++) {
-                    if (strncmp(results[j].ssid, (const char *)records[i].ssid, sizeof(results[j].ssid)) == 0) {
+                    if (memcmp(results[j].bssid, records[i].bssid, sizeof(results[j].bssid)) == 0) {
                         duplicate = true;
                         break;
                     }
@@ -1405,6 +1489,11 @@ esp_err_t wifi_mgr_scan(wifi_mgr_scan_result_t *results, size_t max_results, siz
                 strlcpy(results[out_idx].ssid, (const char *)records[i].ssid, sizeof(results[out_idx].ssid));
                 results[out_idx].rssi = records[i].rssi;
                 results[out_idx].authmode = (uint8_t)records[i].authmode;
+                results[out_idx].channel = records[i].primary;
+                memcpy(results[out_idx].bssid, records[i].bssid, sizeof(results[out_idx].bssid));
+                results[out_idx].connected =
+                    has_connected_ap &&
+                    (memcmp(records[i].bssid, connected_ap.bssid, sizeof(records[i].bssid)) == 0);
                 out_idx++;
             }
             *out_count = out_idx;

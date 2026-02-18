@@ -1,6 +1,7 @@
 #include "api/api_routes.h"
 
 #include <ctype.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -74,6 +75,57 @@ static bool normalize_country_code(char *country_code, size_t country_code_len)
     country_code[0] = (char)toupper((unsigned char)country_code[0]);
     country_code[1] = (char)toupper((unsigned char)country_code[1]);
     country_code[2] = '\0';
+    return true;
+}
+
+static int hex_nibble(char c)
+{
+    if (c >= '0' && c <= '9') {
+        return c - '0';
+    }
+    if (c >= 'a' && c <= 'f') {
+        return 10 + (c - 'a');
+    }
+    if (c >= 'A' && c <= 'F') {
+        return 10 + (c - 'A');
+    }
+    return -1;
+}
+
+static bool normalize_bssid(char *bssid, size_t bssid_len)
+{
+    if (bssid == NULL || bssid_len < APP_WIFI_BSSID_MAX_LEN) {
+        return false;
+    }
+    if (bssid[0] == '\0') {
+        return true;
+    }
+    if (strlen(bssid) != 17U) {
+        return false;
+    }
+
+    char sep = bssid[2];
+    if (sep != ':' && sep != '-') {
+        return false;
+    }
+
+    for (size_t i = 0; i < 6; i++) {
+        size_t idx = i * 3;
+        int hi = hex_nibble(bssid[idx]);
+        int lo = hex_nibble(bssid[idx + 1]);
+        if (hi < 0 || lo < 0) {
+            return false;
+        }
+        bssid[idx] = (char)toupper((unsigned char)bssid[idx]);
+        bssid[idx + 1] = (char)toupper((unsigned char)bssid[idx + 1]);
+        if (i < 5) {
+            if (bssid[idx + 2] != sep) {
+                return false;
+            }
+            bssid[idx + 2] = ':';
+        }
+    }
+    bssid[17] = '\0';
     return true;
 }
 
@@ -156,16 +208,32 @@ esp_err_t api_settings_get_handler(httpd_req_t *req)
 
     cJSON_AddStringToObject(wifi, "ssid", settings->wifi_ssid);
     cJSON_AddStringToObject(wifi, "country_code", settings->wifi_country_code);
+    cJSON_AddStringToObject(wifi, "bssid", settings->wifi_bssid);
     cJSON_AddBoolToObject(wifi, "password_set", settings->wifi_password[0] != '\0');
     cJSON_AddBoolToObject(wifi, "configured", runtime_settings_has_wifi(settings));
     cJSON_AddBoolToObject(wifi, "connected", wifi_mgr_is_connected());
     cJSON_AddBoolToObject(wifi, "setup_ap_active", wifi_mgr_is_setup_ap_active());
     cJSON_AddStringToObject(wifi, "setup_ap_ssid", wifi_mgr_get_setup_ap_ssid());
-    int8_t wifi_rssi_dbm = 0;
-    if (wifi_mgr_get_sta_rssi(&wifi_rssi_dbm) == ESP_OK) {
-        cJSON_AddNumberToObject(wifi, "rssi_dbm", (double)wifi_rssi_dbm);
+    wifi_mgr_sta_ap_info_t sta_ap = {0};
+    if (wifi_mgr_get_sta_ap_info(&sta_ap) == ESP_OK) {
+        char connected_bssid[APP_WIFI_BSSID_MAX_LEN] = {0};
+        snprintf(
+            connected_bssid,
+            sizeof(connected_bssid),
+            "%02X:%02X:%02X:%02X:%02X:%02X",
+            sta_ap.bssid[0],
+            sta_ap.bssid[1],
+            sta_ap.bssid[2],
+            sta_ap.bssid[3],
+            sta_ap.bssid[4],
+            sta_ap.bssid[5]);
+        cJSON_AddNumberToObject(wifi, "rssi_dbm", (double)sta_ap.rssi);
+        cJSON_AddStringToObject(wifi, "connected_bssid", connected_bssid);
+        cJSON_AddNumberToObject(wifi, "connected_channel", (double)sta_ap.channel);
     } else {
         cJSON_AddNullToObject(wifi, "rssi_dbm");
+        cJSON_AddNullToObject(wifi, "connected_bssid");
+        cJSON_AddNullToObject(wifi, "connected_channel");
     }
     cJSON_AddBoolToObject(wifi, "scan_supported", true);
     cJSON_AddItemToObject(root, "wifi", wifi);
@@ -324,6 +392,8 @@ esp_err_t api_settings_put_handler(httpd_req_t *req)
             wifi, "password", settings->wifi_password, sizeof(settings->wifi_password), &invalid_type, &too_long);
         (void)update_string_setting(
             wifi, "country_code", settings->wifi_country_code, sizeof(settings->wifi_country_code), &invalid_type, &too_long);
+        (void)update_string_setting(
+            wifi, "bssid", settings->wifi_bssid, sizeof(settings->wifi_bssid), &invalid_type, &too_long);
     }
     if (cJSON_IsObject(ha)) {
         (void)update_string_setting(
@@ -349,6 +419,8 @@ esp_err_t api_settings_put_handler(httpd_req_t *req)
         root, "wifi_password", settings->wifi_password, sizeof(settings->wifi_password), &invalid_type, &too_long);
     (void)update_string_setting(
         root, "wifi_country_code", settings->wifi_country_code, sizeof(settings->wifi_country_code), &invalid_type, &too_long);
+    (void)update_string_setting(
+        root, "wifi_bssid", settings->wifi_bssid, sizeof(settings->wifi_bssid), &invalid_type, &too_long);
     (void)update_string_setting(
         root, "ha_ws_url", settings->ha_ws_url, sizeof(settings->ha_ws_url), &invalid_type, &too_long);
     (void)update_string_setting(
@@ -384,7 +456,7 @@ esp_err_t api_settings_put_handler(httpd_req_t *req)
         return send_json_error(
             req,
             "400 Bad Request",
-            "One or more settings values are too long (ssid<=32, wifi_password<=64, country_code<=2, ws_url<=255, token<=511, ntp<=127, timezone<=127, language<=15)");
+            "One or more settings values are too long (ssid<=32, wifi_password<=64, country_code<=2, bssid<=17, ws_url<=255, token<=511, ntp<=127, timezone<=127, language<=15)");
     }
     if (!has_ws_scheme(settings->ha_ws_url)) {
         free(settings);
@@ -394,8 +466,13 @@ esp_err_t api_settings_put_handler(httpd_req_t *req)
         free(settings);
         return send_json_error(req, "400 Bad Request", "wifi.country_code must be a 2-letter ISO code (e.g. US, DE)");
     }
+    if (!normalize_bssid(settings->wifi_bssid, sizeof(settings->wifi_bssid))) {
+        free(settings);
+        return send_json_error(req, "400 Bad Request", "wifi.bssid must be empty or MAC format AA:BB:CC:DD:EE:FF");
+    }
     if (settings->wifi_ssid[0] == '\0') {
         settings->wifi_password[0] = '\0';
+        settings->wifi_bssid[0] = '\0';
     }
     if (settings->ntp_server[0] == '\0') {
         strlcpy(settings->ntp_server, APP_NTP_SERVER, sizeof(settings->ntp_server));

@@ -5,6 +5,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "ui/fonts/app_text_fonts.h"
 #include "ui/theme/theme_default.h"
 #include "ui/ui_i18n.h"
 #include "ui/ui_bindings.h"
@@ -640,7 +641,7 @@ esp_err_t w_button_create(const ui_widget_def_t *def, lv_obj_t *parent, ui_widge
     lv_obj_t *title = lv_label_create(card);
     lv_label_set_text(title, title_text);
     lv_obj_set_width(title, def->w - 32);
-    lv_obj_set_style_text_font(title, LV_FONT_DEFAULT, LV_PART_MAIN);
+    lv_obj_set_style_text_font(title, APP_FONT_TEXT_20, LV_PART_MAIN);
     lv_obj_set_style_text_align(title, LV_TEXT_ALIGN_CENTER, LV_PART_MAIN);
 #if APP_UI_TILE_LAYOUT_TUNED
     lv_obj_align(title, LV_ALIGN_BOTTOM_MID, 0, -12);
@@ -650,7 +651,7 @@ esp_err_t w_button_create(const ui_widget_def_t *def, lv_obj_t *parent, ui_widge
 
     lv_obj_t *state_label = lv_label_create(card);
     lv_label_set_text(state_label, ui_i18n_get("common.off", "OFF"));
-    lv_obj_set_style_text_font(state_label, LV_FONT_DEFAULT, LV_PART_MAIN);
+    lv_obj_set_style_text_font(state_label, APP_FONT_TEXT_20, LV_PART_MAIN);
 #if APP_UI_TILE_LAYOUT_TUNED
     lv_obj_align(state_label, LV_ALIGN_TOP_LEFT, 0, 2);
 #else

@@ -119,7 +119,7 @@ static widget_size_limits_t widget_size_limits_for_type(const char *type)
         limits.min_w = 120;
         limits.min_h = 80;
     } else if (strcmp(type, "light_tile") == 0) {
-        limits.min_w = 200;
+        limits.min_w = 180;
         limits.min_h = 180;
         limits.max_w = 480;
         limits.max_h = 480;

@@ -58,6 +58,7 @@ const WEB_I18N_BUILTIN = {
     "settings.wifi.heading": "Wi-Fi",
     "settings.wifi.ssid": "SSID",
     "settings.wifi.country_code": "Country Code",
+    "settings.wifi.bssid": "BSSID lock (optional)",
     "settings.wifi.password": "Password",
     "settings.ha.heading": "Home Assistant",
     "settings.ha.ws_url": "WebSocket URL (ws:// or wss://)",
@@ -83,7 +84,9 @@ const WEB_I18N_BUILTIN = {
     "settings.info.connected": "Connected",
     "settings.info.password_stored": "Password stored",
     "settings.info.country": "Country",
-    "settings.info.rssi": "RSSI",
+    "settings.info.rssi": "RSSI (connected AP)",
+    "settings.info.connected_bssid": "Connected BSSID",
+    "settings.info.channel": "Channel",
     "settings.info.token_stored": "Token stored",
     "settings.info.rest_fallback": "REST fallback",
     "common.yes": "yes",
@@ -105,6 +108,7 @@ const WEB_I18N_BUILTIN = {
     "wifi.scan_click_short": "Click \"Scan\" to list nearby networks.",
     "wifi.scan_no_networks": "No networks found. Move closer to your router and scan again.",
     "wifi.scan_found": "{count} network(s) found. Select one to fill SSID.",
+    "wifi.scan.connected_tag": "connected",
     "wifi.scan.option_unavailable": "Scan unavailable",
     "wifi.scan.option_scanning": "Scanning...",
     "wifi.scan.option_not_run": "No scan yet",
@@ -120,6 +124,7 @@ const WEB_I18N_BUILTIN = {
     "settings.translation.no_file": "Choose a JSON file first.",
     "settings.translation.invalid_code": "Language code must use [a-z0-9_-] and be 2-15 chars.",
     "settings.language.invalid_country": "Wi-Fi country code must be a 2-letter ISO code (e.g. US, DE)",
+    "settings.language.invalid_bssid": "BSSID must be empty or in format AA:BB:CC:DD:EE:FF",
     "settings.language.invalid_ha_url": "HA URL must start with ws:// or wss://",
     "provision.wifi.required_ssid": "SSID is required.",
     "provision.wifi.required_country": "Country code must be 2 letters (e.g. US, DE).",
@@ -153,6 +158,7 @@ const WEB_I18N_BUILTIN = {
     "settings.wifi.heading": "WLAN",
     "settings.wifi.ssid": "SSID",
     "settings.wifi.country_code": "Laendercode",
+    "settings.wifi.bssid": "BSSID Lock (optional)",
     "settings.wifi.password": "Passwort",
     "settings.ha.heading": "Home Assistant",
     "settings.ha.ws_url": "WebSocket URL (ws:// oder wss://)",
@@ -178,7 +184,9 @@ const WEB_I18N_BUILTIN = {
     "settings.info.connected": "Verbunden",
     "settings.info.password_stored": "Passwort gespeichert",
     "settings.info.country": "Land",
-    "settings.info.rssi": "RSSI",
+    "settings.info.rssi": "RSSI (verbundener AP)",
+    "settings.info.connected_bssid": "Verbundener BSSID",
+    "settings.info.channel": "Kanal",
     "settings.info.token_stored": "Token gespeichert",
     "settings.info.rest_fallback": "REST Fallback",
     "common.yes": "ja",
@@ -200,6 +208,7 @@ const WEB_I18N_BUILTIN = {
     "wifi.scan_click_short": "Auf \"Scan\" klicken, um Netze zu finden.",
     "wifi.scan_no_networks": "Keine Netze gefunden. Gehe naeher an den Router und versuche es erneut.",
     "wifi.scan_found": "{count} Netzwerk(e) gefunden. SSID auswaehlen.",
+    "wifi.scan.connected_tag": "verbunden",
     "wifi.scan.option_unavailable": "Scan nicht verfuegbar",
     "wifi.scan.option_scanning": "Suche laeuft...",
     "wifi.scan.option_not_run": "Noch kein Scan",
@@ -215,6 +224,7 @@ const WEB_I18N_BUILTIN = {
     "settings.translation.no_file": "Bitte zuerst eine JSON Datei auswaehlen.",
     "settings.translation.invalid_code": "Sprachcode muss [a-z0-9_-] nutzen und 2-15 Zeichen haben.",
     "settings.language.invalid_country": "WLAN Laendercode muss ein 2-stelliger ISO Code sein (z.B. US, DE)",
+    "settings.language.invalid_bssid": "BSSID muss leer sein oder Format AA:BB:CC:DD:EE:FF haben",
     "settings.language.invalid_ha_url": "HA URL muss mit ws:// oder wss:// beginnen",
     "provision.wifi.required_ssid": "SSID ist erforderlich.",
     "provision.wifi.required_country": "Laendercode muss 2 Buchstaben haben (z.B. US, DE).",
@@ -248,6 +258,7 @@ const WEB_I18N_BUILTIN = {
     "settings.wifi.heading": "Wi-Fi",
     "settings.wifi.ssid": "SSID",
     "settings.wifi.country_code": "Codigo de pais",
+    "settings.wifi.bssid": "Bloqueo BSSID (opcional)",
     "settings.wifi.password": "Contrasena",
     "settings.ha.heading": "Home Assistant",
     "settings.ha.ws_url": "URL WebSocket (ws:// o wss://)",
@@ -273,7 +284,9 @@ const WEB_I18N_BUILTIN = {
     "settings.info.connected": "Conectado",
     "settings.info.password_stored": "Contrasena guardada",
     "settings.info.country": "Pais",
-    "settings.info.rssi": "RSSI",
+    "settings.info.rssi": "RSSI (AP conectado)",
+    "settings.info.connected_bssid": "BSSID conectado",
+    "settings.info.channel": "Canal",
     "settings.info.token_stored": "Token guardado",
     "settings.info.rest_fallback": "Fallback REST",
     "common.yes": "si",
@@ -295,6 +308,7 @@ const WEB_I18N_BUILTIN = {
     "wifi.scan_click_short": "Pulsa \"Escanear\" para listar redes cercanas.",
     "wifi.scan_no_networks": "No se encontraron redes. Acercate al router e intenta de nuevo.",
     "wifi.scan_found": "{count} red(es) encontradas. Selecciona una para llenar SSID.",
+    "wifi.scan.connected_tag": "conectado",
     "wifi.scan.option_unavailable": "Escaneo no disponible",
     "wifi.scan.option_scanning": "Escaneando...",
     "wifi.scan.option_not_run": "Sin escaneo",
@@ -310,6 +324,7 @@ const WEB_I18N_BUILTIN = {
     "settings.translation.no_file": "Selecciona primero un archivo JSON.",
     "settings.translation.invalid_code": "El codigo de idioma debe usar [a-z0-9_-] y tener 2-15 caracteres.",
     "settings.language.invalid_country": "El codigo de pais Wi-Fi debe ser ISO de 2 letras (p.ej. US, DE)",
+    "settings.language.invalid_bssid": "El BSSID debe estar vacio o en formato AA:BB:CC:DD:EE:FF",
     "settings.language.invalid_ha_url": "La URL HA debe empezar con ws:// o wss://",
     "provision.wifi.required_ssid": "SSID es obligatorio.",
     "provision.wifi.required_country": "El codigo de pais debe tener 2 letras (p.ej. US, DE).",
@@ -346,7 +361,7 @@ function widgetSizeLimits(type) {
     case "empty_tile":
       return { minW: 120, minH: 80, maxW: CANVAS_WIDTH, maxH: CANVAS_HEIGHT };
     case "light_tile":
-      return { minW: 200, minH: 180, maxW: 480, maxH: 480 };
+      return { minW: 180, minH: 180, maxW: 480, maxH: 480 };
     case "heating_tile":
       return { minW: 220, minH: 200, maxW: 480, maxH: 480 };
     case "weather_tile":
@@ -465,6 +480,7 @@ const el = {
   sensorEntityOptions: document.getElementById("sensorEntityOptions"),
   settingsWifiSsid: document.getElementById("settingsWifiSsid"),
   settingsWifiCountryCode: document.getElementById("settingsWifiCountryCode"),
+  settingsWifiBssid: document.getElementById("settingsWifiBssid"),
   scanWifiBtn: document.getElementById("scanWifiBtn"),
   settingsWifiScanResults: document.getElementById("settingsWifiScanResults"),
   settingsWifiScanInfo: document.getElementById("settingsWifiScanInfo"),
@@ -647,6 +663,12 @@ function normalizeCountryCode(value) {
   return /^[A-Z]{2}$/.test(normalized) ? normalized : "";
 }
 
+function normalizeBssid(value) {
+  const normalized = (value || "").trim().toUpperCase().replace(/-/g, ":");
+  if (!normalized) return "";
+  return /^[0-9A-F]{2}(:[0-9A-F]{2}){5}$/.test(normalized) ? normalized : "";
+}
+
 function normalizeLanguageCode(value, fallback = "") {
   const normalized = (typeof value === "string" ? value : "").trim().toLowerCase();
   if (!normalized) return fallback;
@@ -799,6 +821,7 @@ function applyWebTranslations() {
   setTextById("settingsWifiHeading", "settings.wifi.heading");
   setTextById("settingsWifiSsidLabel", "settings.wifi.ssid");
   setTextById("settingsWifiCountryCodeLabel", "settings.wifi.country_code");
+  setTextById("settingsWifiBssidLabel", "settings.wifi.bssid");
   setTextById("settingsWifiPasswordLabel", "settings.wifi.password");
   setTextById("scanWifiBtn", "common.scan_wifi");
 
@@ -1029,6 +1052,9 @@ function renderSettings() {
   if (el.settingsWifiCountryCode) {
     el.settingsWifiCountryCode.value = normalizeCountryCode(wifi.country_code) || "US";
   }
+  if (el.settingsWifiBssid) {
+    el.settingsWifiBssid.value = normalizeBssid(wifi.bssid || "");
+  }
   el.settingsWifiPassword.value = "";
   el.settingsHaUrl.value = ha.ws_url || "";
   el.settingsHaToken.value = "";
@@ -1042,12 +1068,22 @@ function renderSettings() {
   }
   renderLanguageOptions();
 
+  const connectedRssiText = Number.isFinite(Number(wifi.rssi_dbm))
+    ? `${Math.round(Number(wifi.rssi_dbm))} dBm`
+    : "n/a";
+  const connectedBssid = normalizeBssid(wifi.connected_bssid || "");
+  const connectedChannel = Number.isFinite(Number(wifi.connected_channel))
+    ? String(Math.round(Number(wifi.connected_channel)))
+    : "n/a";
+
   el.settingsWifiInfo.textContent = [
     `${t("settings.info.configured")}: ${wifi.configured ? t("common.yes") : t("common.no")}`,
     `${t("settings.info.connected")}: ${wifi.connected ? t("common.yes") : t("common.no")}`,
     `${t("settings.info.password_stored")}: ${wifi.password_set ? t("common.yes") : t("common.no")}`,
     `${t("settings.info.country")}: ${normalizeCountryCode(wifi.country_code) || "US"}`,
-    `${t("settings.info.rssi")}: ${Number.isFinite(Number(wifi.rssi_dbm)) ? `${Math.round(Number(wifi.rssi_dbm))} dBm` : "n/a"}`,
+    `${t("settings.info.rssi")}: ${connectedRssiText}`,
+    `${t("settings.info.connected_bssid")}: ${connectedBssid || "n/a"}`,
+    `${t("settings.info.channel")}: ${connectedChannel}`,
   ].join(" | ");
 
   el.settingsHaInfo.textContent = [
@@ -1127,16 +1163,37 @@ function renderWifiScanResults(items, scope = "settings") {
   placeholder.textContent = t("wifi.scan.option_select", { count: items.length }, `Select network (${items.length} found)`);
   select.appendChild(placeholder);
 
-  for (const net of items) {
+  let firstMatchingSsidValue = "";
+  for (let idx = 0; idx < items.length; idx++) {
+    const net = items[idx];
     if (!net || typeof net.ssid !== "string" || !net.ssid.length) continue;
+
+    const bssid = normalizeBssid(net.bssid || "");
+    const rssiText = Number.isFinite(Number(net.rssi)) ? `${Math.round(Number(net.rssi))} dBm` : "n/a";
+    const authmodeText = (typeof net.authmode === "string" && net.authmode.length) ? net.authmode : "unknown";
+    const channelText = Number.isFinite(Number(net.channel)) ? `ch ${Math.round(Number(net.channel))}` : "ch ?";
+    const details = [rssiText, authmodeText, channelText];
+    if (bssid) {
+      details.push(bssid);
+    }
+    if (net.connected === true) {
+      details.push(t("wifi.scan.connected_tag", {}, "connected"));
+    }
+
     const option = document.createElement("option");
-    option.value = net.ssid;
-    option.textContent = `${net.ssid} (${net.rssi} dBm, ${net.authmode})`;
+    option.value = bssid || `${net.ssid}#${idx}`;
+    option.dataset.ssid = net.ssid;
+    option.dataset.bssid = bssid;
+    option.textContent = `${net.ssid} (${details.join(", ")})`;
     select.appendChild(option);
+
+    if (!firstMatchingSsidValue && currentSsid && net.ssid === currentSsid) {
+      firstMatchingSsidValue = option.value;
+    }
   }
 
-  if (currentSsid) {
-    select.value = currentSsid;
+  if (firstMatchingSsidValue) {
+    select.value = firstMatchingSsidValue;
   }
 }
 
@@ -1264,6 +1321,7 @@ async function saveWifiProvisioning() {
     wifi: {
       ssid,
       country_code: countryCode,
+      bssid: null,
     },
     reboot: true,
   };
@@ -1310,6 +1368,8 @@ async function saveSettings() {
   const wifiSsid = el.settingsWifiSsid.value.trim();
   const wifiPassword = el.settingsWifiPassword.value;
   const wifiCountryCode = normalizeCountryCode(el.settingsWifiCountryCode?.value) || "";
+  const wifiBssidRaw = el.settingsWifiBssid?.value || "";
+  const wifiBssid = normalizeBssid(wifiBssidRaw);
   const haUrl = el.settingsHaUrl.value.trim();
   const haToken = el.settingsHaToken.value.trim();
   const haRestEnabled = Boolean(el.settingsHaRestEnabled?.checked);
@@ -1321,6 +1381,10 @@ async function saveSettings() {
     setStatus(t("settings.language.invalid_country"), true);
     return;
   }
+  if (wifiBssidRaw.trim().length > 0 && !wifiBssid) {
+    setStatus(t("settings.language.invalid_bssid"), true);
+    return;
+  }
   if (haUrl && !haUrl.startsWith("ws://") && !haUrl.startsWith("wss://")) {
     setStatus(t("settings.language.invalid_ha_url"), true);
     return;
@@ -1330,6 +1394,7 @@ async function saveSettings() {
     wifi: {
       ssid: wifiSsid,
       country_code: wifiCountryCode,
+      bssid: wifiBssid || null,
     },
     ha: {
       ws_url: haUrl,
@@ -2426,9 +2491,14 @@ function bindUi() {
   el.reloadSettingsBtn.onclick = () => loadSettings();
   el.scanWifiBtn.onclick = () => scanWifiNetworks("settings");
   el.settingsWifiScanResults.onchange = () => {
-    const ssid = el.settingsWifiScanResults.value;
+    const option = el.settingsWifiScanResults.selectedOptions?.[0];
+    const ssid = option?.dataset?.ssid || "";
     if (ssid) {
       el.settingsWifiSsid.value = ssid;
+    }
+    const bssid = normalizeBssid(option?.dataset?.bssid || "");
+    if (bssid && el.settingsWifiBssid) {
+      el.settingsWifiBssid.value = bssid;
     }
   };
   if (el.settingsWifiCountryCode) {
@@ -2438,6 +2508,15 @@ function bindUi() {
         .replace(/[^A-Z]/g, "")
         .slice(0, 2);
       el.settingsWifiCountryCode.value = cleaned;
+    };
+  }
+  if (el.settingsWifiBssid) {
+    el.settingsWifiBssid.oninput = () => {
+      const cleaned = (el.settingsWifiBssid.value || "")
+        .toUpperCase()
+        .replace(/[^0-9A-F:-]/g, "")
+        .slice(0, 17);
+      el.settingsWifiBssid.value = cleaned;
     };
   }
   if (el.uploadLanguageCode) {
@@ -2512,7 +2591,8 @@ function bindUi() {
   }
   if (el.provWifiScanResults) {
     el.provWifiScanResults.onchange = () => {
-      const ssid = el.provWifiScanResults.value;
+      const option = el.provWifiScanResults.selectedOptions?.[0];
+      const ssid = option?.dataset?.ssid || "";
       if (ssid && el.provWifiSsid) {
         el.provWifiSsid.value = ssid;
       }

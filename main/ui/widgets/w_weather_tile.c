@@ -11,6 +11,7 @@
 #include "cJSON.h"
 #include "esp_log.h"
 
+#include "ui/fonts/app_text_fonts.h"
 #include "ui/fonts/mdi_font_registry.h"
 #include "ui/ui_i18n.h"
 #include "ui/theme/theme_default.h"
@@ -29,44 +30,21 @@
 #define APP_UI_WEATHER_LOTTIE_ENABLED 0
 #endif
 
-#if LV_FONT_MONTSERRAT_40
-#define WEATHER_TEMP_FONT (&lv_font_montserrat_40)
-#elif LV_FONT_MONTSERRAT_38
-#define WEATHER_TEMP_FONT (&lv_font_montserrat_38)
-#elif LV_FONT_MONTSERRAT_36
-#define WEATHER_TEMP_FONT (&lv_font_montserrat_36)
-#elif LV_FONT_MONTSERRAT_34
-#define WEATHER_TEMP_FONT (&lv_font_montserrat_34)
-#elif LV_FONT_MONTSERRAT_32
-#define WEATHER_TEMP_FONT (&lv_font_montserrat_32)
-#elif LV_FONT_MONTSERRAT_28
-#define WEATHER_TEMP_FONT (&lv_font_montserrat_28)
-#elif LV_FONT_MONTSERRAT_24
-#define WEATHER_TEMP_FONT (&lv_font_montserrat_24)
-#else
-#define WEATHER_TEMP_FONT LV_FONT_DEFAULT
-#endif
-
-#if LV_FONT_MONTSERRAT_48
-#define WEATHER_TEMP_FONT_LARGE (&lv_font_montserrat_48)
-#elif LV_FONT_MONTSERRAT_44
-#define WEATHER_TEMP_FONT_LARGE (&lv_font_montserrat_44)
-#else
-#define WEATHER_TEMP_FONT_LARGE WEATHER_TEMP_FONT
-#endif
+#define WEATHER_TEMP_FONT APP_FONT_DISPLAY_38
+#define WEATHER_TEMP_FONT_LARGE APP_FONT_DISPLAY_38
 
 #if LV_FONT_MONTSERRAT_20
-#define WEATHER_CONDITION_FONT (&lv_font_montserrat_20)
+#define WEATHER_CONDITION_FONT APP_FONT_TEXT_20
 #elif LV_FONT_MONTSERRAT_18
 #define WEATHER_CONDITION_FONT (&lv_font_montserrat_18)
 #else
-#define WEATHER_CONDITION_FONT LV_FONT_DEFAULT
+#define WEATHER_CONDITION_FONT APP_FONT_TEXT_20
 #endif
 
 #if LV_FONT_MONTSERRAT_24
-#define WEATHER_META_FONT_LARGE (&lv_font_montserrat_24)
+#define WEATHER_META_FONT_LARGE APP_FONT_TEXT_24
 #elif LV_FONT_MONTSERRAT_22
-#define WEATHER_META_FONT_LARGE (&lv_font_montserrat_22)
+#define WEATHER_META_FONT_LARGE APP_FONT_TEXT_22
 #else
 #define WEATHER_META_FONT_LARGE WEATHER_CONDITION_FONT
 #endif
@@ -74,9 +52,9 @@
 #if LV_FONT_MONTSERRAT_32
 #define WEATHER_3DAY_TEMP_FONT (&lv_font_montserrat_32)
 #elif LV_FONT_MONTSERRAT_28
-#define WEATHER_3DAY_TEMP_FONT (&lv_font_montserrat_28)
+#define WEATHER_3DAY_TEMP_FONT APP_FONT_TEXT_28
 #elif LV_FONT_MONTSERRAT_24
-#define WEATHER_3DAY_TEMP_FONT (&lv_font_montserrat_24)
+#define WEATHER_3DAY_TEMP_FONT APP_FONT_TEXT_24
 #else
 #define WEATHER_3DAY_TEMP_FONT WEATHER_TEMP_FONT
 #endif
@@ -84,7 +62,7 @@
 #if LV_FONT_MONTSERRAT_18
 #define WEATHER_3DAY_META_FONT (&lv_font_montserrat_18)
 #else
-#define WEATHER_3DAY_META_FONT WEATHER_CONDITION_FONT
+#define WEATHER_3DAY_META_FONT APP_FONT_TEXT_14
 #endif
 
 #define WEATHER_3DAY_ROWS 4
@@ -995,8 +973,6 @@ static const lv_font_t *weather_pick_render_icon_font(
 #else
     const lv_font_t *font_72 = NULL;
 #endif
-    const lv_font_t *font_100 = mdi_font_weather_100();
-    const lv_font_t *font_120 = mdi_font_weather_120();
 
     /* If size is unresolved during early render, stay conservative and avoid
      * selecting a very large icon font too early. */
@@ -1004,31 +980,15 @@ static const lv_font_t *weather_pick_render_icon_font(
         min_dim = 240;
     }
 
-    const lv_font_t *candidates[8] = {0};
+    const lv_font_t *candidates[4] = {0};
     size_t count = 0;
 
     const lv_coord_t tier_72_min_dim = 261;
-    const lv_coord_t tier_100_min_dim = 320;
-    const lv_coord_t tier_120_min_dim = 420;
 
     if (min_dim < tier_72_min_dim) {
         weather_append_unique_font_candidate(candidates, sizeof(candidates) / sizeof(candidates[0]), &count, font_56);
         weather_append_unique_font_candidate(candidates, sizeof(candidates) / sizeof(candidates[0]), &count, font_72);
-        weather_append_unique_font_candidate(candidates, sizeof(candidates) / sizeof(candidates[0]), &count, font_100);
-        weather_append_unique_font_candidate(candidates, sizeof(candidates) / sizeof(candidates[0]), &count, font_120);
-    } else if (min_dim < tier_100_min_dim) {
-        weather_append_unique_font_candidate(candidates, sizeof(candidates) / sizeof(candidates[0]), &count, font_72);
-        weather_append_unique_font_candidate(candidates, sizeof(candidates) / sizeof(candidates[0]), &count, font_56);
-        weather_append_unique_font_candidate(candidates, sizeof(candidates) / sizeof(candidates[0]), &count, font_100);
-        weather_append_unique_font_candidate(candidates, sizeof(candidates) / sizeof(candidates[0]), &count, font_120);
-    } else if (min_dim < tier_120_min_dim) {
-        weather_append_unique_font_candidate(candidates, sizeof(candidates) / sizeof(candidates[0]), &count, font_100);
-        weather_append_unique_font_candidate(candidates, sizeof(candidates) / sizeof(candidates[0]), &count, font_72);
-        weather_append_unique_font_candidate(candidates, sizeof(candidates) / sizeof(candidates[0]), &count, font_120);
-        weather_append_unique_font_candidate(candidates, sizeof(candidates) / sizeof(candidates[0]), &count, font_56);
     } else {
-        weather_append_unique_font_candidate(candidates, sizeof(candidates) / sizeof(candidates[0]), &count, font_120);
-        weather_append_unique_font_candidate(candidates, sizeof(candidates) / sizeof(candidates[0]), &count, font_100);
         weather_append_unique_font_candidate(candidates, sizeof(candidates) / sizeof(candidates[0]), &count, font_72);
         weather_append_unique_font_candidate(candidates, sizeof(candidates) / sizeof(candidates[0]), &count, font_56);
     }
@@ -1050,24 +1010,16 @@ static const lv_font_t *weather_pick_render_icon_font(
     }
     size_t need56 = weather_font_render_bytes_required(font_56, codepoint);
     size_t need72 = weather_font_render_bytes_required(font_72, codepoint);
-    size_t need100 = weather_font_render_bytes_required(font_100, codepoint);
-    size_t need120 = weather_font_render_bytes_required(font_120, codepoint);
     ESP_LOGI("w_weather_tile",
-        "card=%dx%d min=%d cp=0x%lX has56=%d has72=%d has100=%d has120=%d fit56=%d fit72=%d fit100=%d fit120=%d need56=%u need72=%u need100=%u need120=%u free_big=%u lv_malloc_builtin=%d LV_FONT_FMT_TXT_LARGE=%d",
+        "card=%dx%d min=%d cp=0x%lX has56=%d has72=%d fit56=%d fit72=%d need56=%u need72=%u free_big=%u lv_malloc_builtin=%d LV_FONT_FMT_TXT_LARGE=%d",
         (int)card_w, (int)card_h, (int)min_dim,
         (unsigned long)codepoint,
         weather_font_has_codepoint(font_56, codepoint),
         weather_font_has_codepoint(font_72, codepoint),
-        weather_font_has_codepoint(font_100, codepoint),
-        weather_font_has_codepoint(font_120, codepoint),
         weather_font_has_render_headroom(font_56, codepoint),
         weather_font_has_render_headroom(font_72, codepoint),
-        weather_font_has_render_headroom(font_100, codepoint),
-        weather_font_has_render_headroom(font_120, codepoint),
         (unsigned int)need56,
         (unsigned int)need72,
-        (unsigned int)need100,
-        (unsigned int)need120,
         use_builtin_malloc ? (unsigned int)mon.free_biggest_size : 0U,
         use_builtin_malloc ? 1 : 0,
         (int)LV_FONT_FMT_TXT_LARGE);

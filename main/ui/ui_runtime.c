@@ -24,7 +24,7 @@
 #include "ui/theme/theme_default.h"
 #include "util/log_tags.h"
 
-#define UI_MODEL_RECONCILE_INTERVAL_MS 250
+#define UI_MODEL_RECONCILE_INTERVAL_MS 1000
 
 static ui_widget_instance_t s_widgets[APP_MAX_WIDGETS_TOTAL];
 static size_t s_widget_count = 0;
@@ -38,6 +38,19 @@ static bool s_pending_state_reconcile = false;
 static bool s_pending_topbar_refresh = false;
 static uint32_t s_deferred_event_count = 0;
 static int64_t s_deferred_event_log_ms = 0;
+typedef struct {
+    bool valid;
+    int minute;
+    int hour;
+    int day;
+    int month;
+    int year;
+    bool wifi_connected;
+    bool wifi_setup_ap_active;
+    bool ha_connected;
+    bool ha_initial_sync_done;
+} ui_topbar_cache_t;
+static ui_topbar_cache_t s_topbar_cache = {0};
 #if APP_UI_TEST_WEATHER_ICON_OVERLAY
 static lv_obj_t *s_weather_icon_overlay = NULL;
 #endif
@@ -80,7 +93,7 @@ static ui_widget_size_limits_t ui_runtime_widget_size_limits(const char *type)
         limits.min_w = 120;
         limits.min_h = 80;
     } else if (strcmp(type, "light_tile") == 0) {
-        limits.min_w = 200;
+        limits.min_w = 180;
         limits.min_h = 180;
         limits.max_w = 480;
         limits.max_h = 480;
@@ -158,9 +171,37 @@ static void ui_runtime_refresh_topbar(void)
     time_t now = time(NULL);
     struct tm info = {0};
     localtime_r(&now, &info);
-    ui_pages_set_topbar_datetime(&info);
-    ui_pages_set_topbar_status(wifi_mgr_is_connected(), wifi_mgr_is_setup_ap_active(), ha_client_is_connected(),
-        ha_client_is_initial_sync_done());
+
+    bool wifi_connected = wifi_mgr_is_connected();
+    bool wifi_setup_ap_active = wifi_mgr_is_setup_ap_active();
+    bool ha_connected = ha_client_is_connected();
+    bool ha_initial_sync_done = ha_client_is_initial_sync_done();
+
+    bool datetime_changed = !s_topbar_cache.valid || info.tm_min != s_topbar_cache.minute ||
+                            info.tm_hour != s_topbar_cache.hour || info.tm_mday != s_topbar_cache.day ||
+                            info.tm_mon != s_topbar_cache.month || info.tm_year != s_topbar_cache.year;
+    bool status_changed = !s_topbar_cache.valid || wifi_connected != s_topbar_cache.wifi_connected ||
+                          wifi_setup_ap_active != s_topbar_cache.wifi_setup_ap_active ||
+                          ha_connected != s_topbar_cache.ha_connected ||
+                          ha_initial_sync_done != s_topbar_cache.ha_initial_sync_done;
+
+    if (datetime_changed) {
+        ui_pages_set_topbar_datetime(&info);
+    }
+    if (status_changed) {
+        ui_pages_set_topbar_status(wifi_connected, wifi_setup_ap_active, ha_connected, ha_initial_sync_done);
+    }
+
+    s_topbar_cache.valid = true;
+    s_topbar_cache.minute = info.tm_min;
+    s_topbar_cache.hour = info.tm_hour;
+    s_topbar_cache.day = info.tm_mday;
+    s_topbar_cache.month = info.tm_mon;
+    s_topbar_cache.year = info.tm_year;
+    s_topbar_cache.wifi_connected = wifi_connected;
+    s_topbar_cache.wifi_setup_ap_active = wifi_setup_ap_active;
+    s_topbar_cache.ha_connected = ha_connected;
+    s_topbar_cache.ha_initial_sync_done = ha_initial_sync_done;
 }
 
 static void ui_runtime_show_weather_icon_overlay(void)
@@ -171,13 +212,7 @@ static void ui_runtime_show_weather_icon_overlay(void)
         return;
     }
 
-    const lv_font_t *font = mdi_font_weather_120();
-    if (font == NULL) {
-        font = mdi_font_weather_100();
-    }
-    if (font == NULL) {
-        font = mdi_font_weather();
-    }
+    const lv_font_t *font = mdi_font_weather();
     if (font == NULL) {
         font = mdi_font_large();
     }
@@ -196,8 +231,6 @@ static void ui_runtime_show_weather_icon_overlay(void)
     lv_obj_move_foreground(s_weather_icon_overlay);
 
     ESP_LOGI(TAG_UI, "Weather icon overlay test enabled (font=%s)",
-        (mdi_font_weather_120() != NULL) ? "120" :
-        (mdi_font_weather_100() != NULL) ? "100" :
         (mdi_font_weather() != NULL) ? "72/56" : "none");
 #endif
 }
@@ -349,6 +382,7 @@ esp_err_t ui_runtime_load_layout(const char *layout_json)
         return ESP_ERR_TIMEOUT;
     }
 
+    s_topbar_cache.valid = false;
     ui_pages_reset();
     memset(s_widgets, 0, sizeof(s_widgets));
     s_widget_count = 0;
@@ -532,6 +566,7 @@ esp_err_t ui_runtime_init(void)
     if (!display_lock(0)) {
         return ESP_ERR_TIMEOUT;
     }
+    s_topbar_cache.valid = false;
     theme_default_init();
     ui_pages_init();
     ui_runtime_show_weather_icon_overlay();

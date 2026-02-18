@@ -400,11 +400,20 @@ bool ha_ws_get_cached_resolved_ipv4(char *host_out, size_t host_out_sz, char *ip
 esp_err_t ha_ws_send_text(const char *text)
 {
 #if HA_WS_HAS_ESP_WS_CLIENT
-    if (text == NULL || s_ws_client == NULL || !ha_ws_is_connected()) {
+    if (text == NULL || s_ws_client == NULL) {
+        return ESP_ERR_INVALID_STATE;
+    }
+    if (!ha_ws_is_connected()) {
         return ESP_ERR_INVALID_STATE;
     }
     int written = esp_websocket_client_send_text(s_ws_client, text, strlen(text), pdMS_TO_TICKS(150));
-    return (written > 0) ? ESP_OK : ESP_FAIL;
+    if (written > 0) {
+        return ESP_OK;
+    }
+
+    /* Mark as disconnected on send failure so upper layers can recover. */
+    s_connected = false;
+    return ESP_FAIL;
 #else
     (void)text;
     return ESP_ERR_NOT_SUPPORTED;

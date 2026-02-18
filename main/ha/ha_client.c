@@ -170,6 +170,9 @@ static const int HA_WS_TLS_ERR_BAD_INPUT_DATA = 0x7100;
 static const int64_t HA_WS_GET_STATES_MIN_SESSION_MS = 3000;
 static const int64_t HA_WS_GET_STATES_POST_SUBSCRIBE_DELAY_MS = 1200;
 static const int64_t HA_WS_GET_STATES_BAD_INPUT_COOLDOWN_MS = 60000;
+/* If true, repeated WS failures while Wi-Fi is up can escalate to Wi-Fi/C6 recover.
+   Keep disabled so intentional HA downtime does not trigger transport recovery loops. */
+static const bool HA_WS_ESCALATE_RECOVER_WHEN_WIFI_UP = false;
 static const int64_t HA_WS_ENTITIES_SUBSCRIBE_STEP_DELAY_MS = 300;
 /* Internal heap on ESP32-P4 can be low in normal operation due to DMA/internal reservations.
    Tune thresholds to avoid permanent "protect" on healthy WS-only idle. */
@@ -4122,6 +4125,17 @@ static void ha_client_task(void *arg)
 
         if (wifi_up && wifi_seen_connected_once && pending_force_wifi_recover &&
             (now_ms - last_wifi_force_recover_ms) >= HA_WIFI_FORCE_RECOVER_COOLDOWN_MS) {
+            if (!HA_WS_ESCALATE_RECOVER_WHEN_WIFI_UP) {
+                ESP_LOGW(TAG_HA_CLIENT,
+                    "Suppressing Wi-Fi/C6 recover on short WS sessions while Wi-Fi link is up (likely HA downtime)");
+                xSemaphoreTake(s_client.mutex, portMAX_DELAY);
+                s_client.pending_force_wifi_recover = false;
+                s_client.ws_short_session_strikes = 0;
+                xSemaphoreGive(s_client.mutex);
+                last_wifi_force_recover_ms = now_ms;
+                vTaskDelay(HA_CLIENT_TASK_DELAY_TICKS);
+                continue;
+            }
             if (ws_bad_input_recent) {
                 ESP_LOGW(TAG_HA_CLIENT,
                     "Suppressing Wi-Fi recover on short WS sessions because last WS error is TLS BAD_INPUT_DATA (-0x7100)");
@@ -4166,6 +4180,16 @@ static void ha_client_task(void *arg)
         if (wifi_up && wifi_seen_connected_once && !connected &&
             ws_error_streak >= HA_WS_ERROR_STREAK_WIFI_RECOVER_THRESHOLD &&
             (now_ms - last_wifi_force_recover_ms) >= HA_WIFI_FORCE_RECOVER_COOLDOWN_MS) {
+            if (!HA_WS_ESCALATE_RECOVER_WHEN_WIFI_UP) {
+                ESP_LOGW(TAG_HA_CLIENT,
+                    "Suppressing Wi-Fi/C6 recover on WS connect error streak while Wi-Fi link is up (likely HA downtime)");
+                xSemaphoreTake(s_client.mutex, portMAX_DELAY);
+                s_client.ws_error_streak = 0;
+                xSemaphoreGive(s_client.mutex);
+                last_wifi_force_recover_ms = now_ms;
+                vTaskDelay(HA_CLIENT_TASK_DELAY_TICKS);
+                continue;
+            }
             if (ws_bad_input_recent) {
                 ESP_LOGW(TAG_HA_CLIENT,
                     "Suppressing Wi-Fi recover on WS connect error streak because last WS error is TLS BAD_INPUT_DATA (-0x7100)");
@@ -4419,7 +4443,20 @@ static void ha_client_task(void *arg)
         if (connected && authenticated && should_send_ping) {
             uint32_t ping_id = 0;
             if (ha_client_send_ping(&ping_id) != ESP_OK) {
-                ESP_LOGW(TAG_HA_CLIENT, "Failed to send HA ping");
+                ESP_LOGW(TAG_HA_CLIENT, "Failed to send HA ping, forcing websocket reconnect");
+                ha_ws_stop();
+                xSemaphoreTake(s_client.mutex, portMAX_DELAY);
+                s_client.authenticated = false;
+                s_client.pending_send_auth = false;
+                s_client.pending_send_pong = false;
+                s_client.pending_pong_id = 0;
+                s_client.ping_inflight = false;
+                s_client.ping_inflight_id = 0;
+                s_client.ping_sent_unix_ms = 0;
+                s_client.ping_timeout_strikes = 0;
+                xSemaphoreGive(s_client.mutex);
+                last_ws_restart_ms = now_ms - HA_WS_RESTART_INTERVAL_MS;
+                continue;
             } else {
                 xSemaphoreTake(s_client.mutex, portMAX_DELAY);
                 s_client.ping_inflight = true;

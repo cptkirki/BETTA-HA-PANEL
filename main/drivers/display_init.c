@@ -13,7 +13,7 @@
 #include "app_config.h"
 #include "util/log_tags.h"
 
-#define DISPLAY_DRAW_BUFFER_PIXELS ((APP_SCREEN_WIDTH * APP_SCREEN_HEIGHT) / 5U)
+#define DISPLAY_FULL_BUFFER_PIXELS ((APP_SCREEN_WIDTH * APP_SCREEN_HEIGHT))
 
 static bool s_display_ready = false;
 static lv_display_t *s_lv_display = NULL;
@@ -58,11 +58,11 @@ esp_err_t display_init(void)
         ESP_LOGW(TAG_DISPLAY, "Could not enable backlight: %s", esp_err_to_name(err));
     }
 
-    const lvgl_port_display_cfg_t disp_cfg = {
+    lvgl_port_display_cfg_t disp_cfg = {
         .io_handle = lcd.io,
         .panel_handle = lcd.panel,
         .control_handle = lcd.control,
-        .buffer_size = DISPLAY_DRAW_BUFFER_PIXELS,
+        .buffer_size = DISPLAY_FULL_BUFFER_PIXELS / 5U,
         .double_buffer = true,
         .hres = APP_SCREEN_WIDTH,
         .vres = APP_SCREEN_HEIGHT,
@@ -77,23 +77,41 @@ esp_err_t display_init(void)
 #endif
         .flags = {
             .buff_dma = true,
-            .buff_spiram = false,
+            .buff_spiram = true,
             .sw_rotate = false,
 #if LV_VERSION_MAJOR >= 9
             .swap_bytes = (BSP_LCD_BIGENDIAN ? true : false),
 #endif
             .full_refresh = false,
-            .direct_mode = true,
+            .direct_mode = false,
         },
     };
 
     const lvgl_port_display_dsi_cfg_t dsi_cfg = {
         .flags = {
-            .avoid_tearing = true,
+            .avoid_tearing = false,
         },
     };
 
-    s_lv_display = lvgl_port_add_disp_dsi(&disp_cfg, &dsi_cfg);
+    static const uint8_t draw_buf_divisors[] = {5U, 8U, 10U, 12U};
+    uint8_t used_divisor = 0U;
+    uint32_t used_buffer_pixels = 0U;
+    for (size_t i = 0; i < (sizeof(draw_buf_divisors) / sizeof(draw_buf_divisors[0])); i++) {
+        uint8_t divisor = draw_buf_divisors[i];
+        if (divisor == 0U) {
+            continue;
+        }
+        disp_cfg.buffer_size = DISPLAY_FULL_BUFFER_PIXELS / divisor;
+        s_lv_display = lvgl_port_add_disp_dsi(&disp_cfg, &dsi_cfg);
+        if (s_lv_display != NULL) {
+            used_divisor = divisor;
+            used_buffer_pixels = disp_cfg.buffer_size;
+            break;
+        }
+        ESP_LOGW(TAG_DISPLAY, "lvgl_port_add_disp_dsi failed with draw_buf=1/%u (%u px), trying smaller buffer",
+            (unsigned)divisor, (unsigned)disp_cfg.buffer_size);
+    }
+
     if (s_lv_display == NULL) {
         ESP_LOGE(TAG_DISPLAY, "lvgl_port_add_disp_dsi failed");
         return ESP_FAIL;
@@ -104,8 +122,8 @@ esp_err_t display_init(void)
 
     s_display_ready = true;
     ESP_LOGI(TAG_DISPLAY,
-        "Display initialized (esp_lvgl_port + DSI, avoid_tearing=1, double_buffer=1, draw_buf=%u px)",
-        (unsigned)DISPLAY_DRAW_BUFFER_PIXELS);
+        "Display initialized (esp_lvgl_port + DSI, avoid_tearing=0, direct_mode=0, double_buffer=1, draw_buf=1/%u, %u px)",
+        (unsigned)used_divisor, (unsigned)used_buffer_pixels);
     return ESP_OK;
 }
 

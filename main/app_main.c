@@ -155,6 +155,7 @@ void app_main(void)
             .ssid = s_runtime_settings.wifi_ssid,
             .password = s_runtime_settings.wifi_password,
             .country_code = s_runtime_settings.wifi_country_code,
+            .bssid = s_runtime_settings.wifi_bssid,
             .wait_for_ip = APP_WIFI_WAIT_FOR_IP,
             .connect_timeout_ms = APP_WIFI_CONNECT_TIMEOUT_MS,
             .max_retries = APP_WIFI_MAX_RETRIES,
