@@ -1,4 +1,7 @@
-# BETTA HA Panel
+# BETTA HA Panel 
+Inline-style: 
+![alt text](https://github.com/cptkirki/BETTA-HA-PANEL/blob/main/images/BETTAOS.jpg "BETTA OS Logo")
+
 A runtime configurable Home Assistant dashboard for the ESP32-P4 Smart 86 Box development board.
 
 ## Projektbeschreibung
@@ -8,3 +11,12 @@ BETTA HA Panel macht aus der Smart86 Box ein eigenstaendiges 720x720 Home-Assist
 - Lokaler Web-Editor unter `http://<panel-ip>` fuer Layout, Widgets und Einstellungen
 - Integrierter Provisioning-Flow fuer Wi-Fi und Home Assistant (inkl. Setup-AP `BETTA-Setup`)
 - Mehrseitiges Widget-Dashboard, z. B. Sensor, Button, Slider, Graph, Light-, Heating- und Weather-Tiles
+
+Inline-style: 
+![alt text](https://github.com/cptkirki/BETTA-HA-PANEL/blob/main/images/light%20example.jpg "Light tile example")
+
+Inline-style: 
+![alt text](https://github.com/cptkirki/BETTA-HA-PANEL/blob/main/images/heating%20heating.jpg "Heating tile example")
+
+Inline-style: 
+![alt text](https://github.com/cptkirki/BETTA-HA-PANEL/blob/main/images/weather%20forecast.jpg "3day weather forecast")
