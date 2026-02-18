@@ -9,3 +9,23 @@ release/network_adapter_esp32c6*.bin
 main/ui/weather_icons/**
 !main/ui/weather_icons/
 !main/ui/weather_icons/UPSTREAM_LINK.txt
+
+# Local generated font files
+main/ui/fonts/mditop50icons.c
+main/ui/fonts/mditop50icons42.c
+main/ui/fonts/mditop50icons56.c
+main/ui/fonts/mditop50icons72.c
+main/ui/fonts/mdiweatherIcons20.c
+main/ui/fonts/poppins_regular_12.c
+main/ui/fonts/poppins_regular_14.c
+main/ui/fonts/poppins_regular_16.c
+main/ui/fonts/poppins_regular_18.c
+main/ui/fonts/poppins_regular_20.c
+main/ui/fonts/poppins_regular_22.c
+main/ui/fonts/poppins_regular_24.c
+main/ui/fonts/poppins_regular_28.c
+main/ui/fonts/poppins_regular_34.c
+main/ui/fonts/poppins_regular_36.c
+main/ui/fonts/poppins_regular_38.c
+main/ui/fonts/poppins_regular_40.c
+main/ui/fonts/materialdesignicons-webfont.ttf

@@ -1,18 +1,24 @@
-![alt text](https://github.com/cptkirki/BETTA-HA-PANEL/blob/main/images/BETTAOS.jpg "BETTA OS Logo")
+<img src="images/BETTAOS.jpg" alt="BETTA OS Logo" width="49%" />
 # BETTA HA Panel 
 A runtime configurable Home Assistant dashboard for the ESP32-P4 Smart 86 Box development board.
 
 ## Projektbeschreibung
-ETTA HA Panel turns the Smart86 Box into a standalone 720×720 Home Assistant wall panel. The dashboard is configured directly on the device via the integrated BETTA Editor, while layout and settings are stored as JSON in LittleFS.
+BETTA HA Panel turns the Smart86 Box into a standalone 720x720 Home Assistant wall panel. It is built for a dedicated touchscreen experience with fast access to your most important entities, scenes, and automations.
+
+The dashboard is configured directly on the device via the integrated BETTA Editor. Layout and settings are stored as JSON in LittleFS, so you can iterate quickly without rebuilding firmware for every UI change.
 
 - Live connection to Home Assistant via WebSocket (optionally with REST fallback)
 - Local web editor at `http://<panel-ip>` for layout, widgets, and settings
 - Integrated provisioning flow for Wi-Fi and Home Assistant (including the setup AP `BETTA-Setup`)
 - Multi-page widget dashboard, e.g., sensor, button, slider, graph, light, heating, and weather tiles
+- Subtle Lottie-animated weather icons for a more dynamic forecast view
 
 A few examples:
 
-![alt text](https://github.com/cptkirki/BETTA-HA-PANEL/blob/main/images/light%20on%20example.jpg "Light tiles ON example")   ![alt text](https://github.com/cptkirki/BETTA-HA-PANEL/blob/main/images/heating%20on%20example.jpg "Heating ON example")
+<p>
+  <img src="images/light%20on%20example.jpg" alt="Light tiles ON example" width="49%" />
+  <img src="images/heating%20on%20example.jpg" alt="Heating ON example" width="49%" />
+</p>
 
 
 
