@@ -60,9 +60,9 @@ config APP_HOSTED_AUTO_UPDATE_C6_FW
     default y
     depends on ESP_HOSTED_ENABLED
     help
-        If enabled, the host compares the running ESP32-C6 firmware version
-        with the ESP-Hosted host stack version and performs a slave OTA update
-        when they differ. After successful OTA, the host reboots to resync.
+        If enabled, the host runs automatic C6 slave OTA using the bundled
+        firmware image whenever running C6 firmware differs from host version,
+        including 0.0.0/unknown coprocessor firmware recovery.
 
 endmenu
 

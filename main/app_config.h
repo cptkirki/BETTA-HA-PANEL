@@ -136,9 +136,6 @@
 #define APP_HOSTED_AUTO_UPDATE_C6_FW 1
 #endif
 
-/* Expert override: force a one-time C6 OTA to bundled image even when running FW matches host version. */
-#define APP_HOSTED_FORCE_BUNDLED_C6_UPDATE 0
-
 /* Expert override: allow bundled C6 FW version different from host ESP-Hosted stack version. */
 #define APP_HOSTED_ALLOW_BUNDLED_C6_VERSION_MISMATCH 0
 

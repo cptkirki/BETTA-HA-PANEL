@@ -338,6 +338,8 @@ static void wifi_mgr_try_reconnect(uint8_t reason, int attempt_no)
 #define HOSTED_TRANSPORT_FAIL_BIT BIT1
 #define HOSTED_TRANSPORT_WAIT_MS 8000
 #define HOSTED_C6_OTA_CHUNK_SIZE 1500U
+#define HOSTED_C6_FWVER_QUERY_RETRIES 3
+#define HOSTED_C6_FWVER_QUERY_RETRY_DELAY_MS 300
 
 static EventGroupHandle_t s_hosted_event_group = NULL;
 static esp_event_handler_instance_t s_hosted_event_instance = NULL;
@@ -501,6 +503,14 @@ static uint32_t hosted_version_pack(uint32_t major, uint32_t minor, uint32_t pat
     return ESP_HOSTED_VERSION_VAL((major & 0xFFU), (minor & 0xFFU), (patch & 0xFFU));
 }
 
+static bool hosted_is_zero_version(const esp_hosted_coprocessor_fwver_t *fw)
+{
+    if (fw == NULL) {
+        return false;
+    }
+    return (fw->major1 == 0U) && (fw->minor1 == 0U) && (fw->patch1 == 0U);
+}
+
 static bool hosted_parse_version_text(const char *text, uint32_t *major, uint32_t *minor, uint32_t *patch)
 {
     if (text == NULL || text[0] == '\0' || major == NULL || minor == NULL || patch == NULL) {
@@ -568,29 +578,26 @@ static void wifi_mgr_maybe_auto_update_c6_fw(const esp_hosted_coprocessor_fwver_
         return;
     }
 
-    const bool force_bundled_update = (APP_HOSTED_FORCE_BUNDLED_C6_UPDATE != 0);
     const bool allow_version_mismatch = (APP_HOSTED_ALLOW_BUNDLED_C6_VERSION_MISMATCH != 0);
     uint32_t host_version = hosted_version_pack(
         ESP_HOSTED_VERSION_MAJOR_1, ESP_HOSTED_VERSION_MINOR_1, ESP_HOSTED_VERSION_PATCH_1);
     uint32_t running_version = hosted_version_pack(running_fw->major1, running_fw->minor1, running_fw->patch1);
+    const bool running_version_is_zero = hosted_is_zero_version(running_fw);
 
-    if (running_version == host_version && !force_bundled_update) {
+    if (running_version == host_version) {
         return;
     }
 
-    if (running_version != host_version) {
+    if (running_version_is_zero) {
+        ESP_LOGW(TAG_WIFI,
+            "C6 FW reports 0.0.0; forcing bundled firmware update check");
+    } else if (running_version != host_version) {
         ESP_LOGW(TAG_WIFI,
             "C6 FW mismatch: running %u.%u.%u, host expects " ESP_HOSTED_VERSION_PRINTF_FMT,
             (unsigned int)running_fw->major1,
             (unsigned int)running_fw->minor1,
             (unsigned int)running_fw->patch1,
             ESP_HOSTED_VERSION_PRINTF_ARGS(host_version));
-    } else {
-        ESP_LOGW(TAG_WIFI,
-            "Forced C6 OTA enabled: running FW matches host (%u.%u.%u), but bundled image will still be evaluated",
-            (unsigned int)running_fw->major1,
-            (unsigned int)running_fw->minor1,
-            (unsigned int)running_fw->patch1);
     }
 
 #if !APP_HAVE_HOSTED_C6_FW_IMAGE
@@ -637,12 +644,8 @@ static void wifi_mgr_maybe_auto_update_c6_fw(const esp_hosted_coprocessor_fwver_
         }
 
         if (bundled_version == running_version) {
-            if (!force_bundled_update) {
-                ESP_LOGW(TAG_WIFI, "Running C6 version already equals bundled image; skipping auto update");
-                return;
-            }
-            ESP_LOGW(TAG_WIFI,
-                "Forced C6 OTA enabled: bundled and running versions are equal, reflashing anyway");
+            ESP_LOGW(TAG_WIFI, "Running C6 version already equals bundled image; skipping auto update");
+            return;
         }
     } else {
         ESP_LOGW(TAG_WIFI,
@@ -783,15 +786,30 @@ static esp_err_t wifi_mgr_init_hosted_transport(void)
     }
 
     esp_hosted_coprocessor_fwver_t fw = {0};
-    esp_err_t fw_err = esp_hosted_get_coprocessor_fwversion(&fw);
-    if (fw_err != ESP_OK) {
+    esp_err_t fw_err = ESP_FAIL;
+    for (int attempt = 1; attempt <= HOSTED_C6_FWVER_QUERY_RETRIES; attempt++) {
+        fw_err = esp_hosted_get_coprocessor_fwversion(&fw);
+        if (fw_err == ESP_OK) {
+            break;
+        }
         ESP_LOGW(TAG_WIFI,
-                 "ESP-Hosted connected, but coprocessor FW version query failed (%s). Continuing anyway.",
-                 esp_err_to_name(fw_err));
-        // Not fatal: Waveshare example runs even without this response.
-    } else {
+                 "Coprocessor FW version query failed (%s), attempt %d/%d",
+                 esp_err_to_name(fw_err), attempt, HOSTED_C6_FWVER_QUERY_RETRIES);
+        if (attempt < HOSTED_C6_FWVER_QUERY_RETRIES) {
+            vTaskDelay(pdMS_TO_TICKS(HOSTED_C6_FWVER_QUERY_RETRY_DELAY_MS));
+        }
+    }
+
+    if (fw_err == ESP_OK) {
         ESP_LOGI(TAG_WIFI, "ESP-Hosted connected to C6 FW %" PRIu32 ".%" PRIu32 ".%" PRIu32,
                  fw.major1, fw.minor1, fw.patch1);
+        wifi_mgr_maybe_auto_update_c6_fw(&fw);
+    } else {
+        // Treat unknown version as 0.0.0 so blank/legacy co-processors are auto-recovered.
+        ESP_LOGW(TAG_WIFI,
+                 "ESP-Hosted connected, but coprocessor FW version is unavailable (%s). "
+                 "Assuming 0.0.0 and evaluating bundled C6 OTA.",
+                 esp_err_to_name(fw_err));
         wifi_mgr_maybe_auto_update_c6_fw(&fw);
     }
 
