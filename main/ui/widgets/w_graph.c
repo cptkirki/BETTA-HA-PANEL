@@ -573,13 +573,14 @@ static void graph_rebuild_chart(w_graph_ctx_t *ctx)
         if (slot_end <= slot_start) {
             slot_end = slot_start + 1U;
         }
+        bool is_last_slot = (i == (ctx->point_count - 1));
 
         bool slot_has_value = false;
         float slot_value = 0.0f;
 
         while (history_idx < ctx->history_count) {
             uint32_t ts = ctx->history[history_idx].bucket_ts;
-            if (ts >= slot_end) {
+            if (is_last_slot ? (ts > slot_end) : (ts >= slot_end)) {
                 break;
             }
             if (ts >= slot_start) {
@@ -836,7 +837,7 @@ esp_err_t w_graph_create(const ui_widget_def_t *def, lv_obj_t *parent, ui_widget
     lv_obj_set_style_line_width(chart, 1, LV_PART_MAIN);
     lv_chart_set_type(chart, LV_CHART_TYPE_LINE);
     lv_chart_set_div_line_count(chart, 3, 0);
-    lv_obj_set_style_size(chart, 0, 0, LV_PART_INDICATOR);
+    lv_obj_set_style_size(chart, 5, 5, LV_PART_INDICATOR);
     lv_obj_set_style_line_width(chart, 2, LV_PART_ITEMS);
 
     w_graph_ctx_t *ctx = calloc(1, sizeof(w_graph_ctx_t));

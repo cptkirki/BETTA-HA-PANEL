@@ -89,9 +89,16 @@
 
 #define WEATHER_3DAY_ROWS 4
 #define WEATHER_3DAY_TRACK_BG 0x4A5D6D
-#define WEATHER_3DAY_FILL_COLD 0x79CDE0
-#define WEATHER_3DAY_FILL_WARM 0xF4B764
+#define WEATHER_3DAY_FILL_COLD 0x4DA6FF
+#define WEATHER_3DAY_FILL_MIXED 0x9FCF73
+#define WEATHER_3DAY_FILL_WARM 0xF2D34D
+#define WEATHER_3DAY_FILL_HOT 0xE8783A
 #define WEATHER_3DAY_MARKER_RING 0x2E3C49
+
+#define WEATHER_3DAY_SCALE_MIN_C 0.0f
+#define WEATHER_3DAY_SCALE_MIX_C 16.0f
+#define WEATHER_3DAY_SCALE_WARM_C 22.0f
+#define WEATHER_3DAY_SCALE_MAX_C 30.0f
 
 typedef struct {
     bool valid;
@@ -1399,6 +1406,91 @@ static float weather_clampf(float value, float low, float high)
     return value;
 }
 
+static bool weather_unit_is_fahrenheit(const char *unit)
+{
+    if (unit == NULL || unit[0] == '\0') {
+        return false;
+    }
+
+    for (size_t i = 0; unit[i] != '\0'; i++) {
+        char c = unit[i];
+        if (c >= 'a' && c <= 'z') {
+            c = (char)(c - ('a' - 'A'));
+        }
+        if (c == 'F') {
+            return true;
+        }
+    }
+    return false;
+}
+
+static float weather_temp_from_celsius(float celsius, const char *unit)
+{
+    if (weather_unit_is_fahrenheit(unit)) {
+        return (celsius * 9.0f / 5.0f) + 32.0f;
+    }
+    return celsius;
+}
+
+static float weather_3day_scale_min(const char *unit)
+{
+    return weather_temp_from_celsius(WEATHER_3DAY_SCALE_MIN_C, unit);
+}
+
+static float weather_3day_scale_mix(const char *unit)
+{
+    return weather_temp_from_celsius(WEATHER_3DAY_SCALE_MIX_C, unit);
+}
+
+static float weather_3day_scale_warm(const char *unit)
+{
+    return weather_temp_from_celsius(WEATHER_3DAY_SCALE_WARM_C, unit);
+}
+
+static float weather_3day_scale_max(const char *unit)
+{
+    return weather_temp_from_celsius(WEATHER_3DAY_SCALE_MAX_C, unit);
+}
+
+static lv_color_t weather_color_lerp(lv_color_t a, lv_color_t b, float t)
+{
+    t = weather_clampf(t, 0.0f, 1.0f);
+    uint8_t r = (uint8_t)((float)a.red + ((float)b.red - (float)a.red) * t + 0.5f);
+    uint8_t g = (uint8_t)((float)a.green + ((float)b.green - (float)a.green) * t + 0.5f);
+    uint8_t bl = (uint8_t)((float)a.blue + ((float)b.blue - (float)a.blue) * t + 0.5f);
+    return lv_color_make(r, g, bl);
+}
+
+static lv_color_t weather_3day_temp_color(float value, const char *unit)
+{
+    float t0 = weather_3day_scale_min(unit);
+    float t1 = weather_3day_scale_mix(unit);
+    float t2 = weather_3day_scale_warm(unit);
+    float t3 = weather_3day_scale_max(unit);
+
+    lv_color_t c0 = lv_color_hex(WEATHER_3DAY_FILL_COLD);
+    lv_color_t c1 = lv_color_hex(WEATHER_3DAY_FILL_MIXED);
+    lv_color_t c2 = lv_color_hex(WEATHER_3DAY_FILL_WARM);
+    lv_color_t c3 = lv_color_hex(WEATHER_3DAY_FILL_HOT);
+
+    value = weather_clampf(value, t0, t3);
+
+    if (value <= t1) {
+        float denom = (t1 - t0);
+        float ratio = (denom > 0.001f) ? ((value - t0) / denom) : 0.0f;
+        return weather_color_lerp(c0, c1, ratio);
+    }
+    if (value <= t2) {
+        float denom = (t2 - t1);
+        float ratio = (denom > 0.001f) ? ((value - t1) / denom) : 0.0f;
+        return weather_color_lerp(c1, c2, ratio);
+    }
+
+    float denom = (t3 - t2);
+    float ratio = (denom > 0.001f) ? ((value - t2) / denom) : 0.0f;
+    return weather_color_lerp(c2, c3, ratio);
+}
+
 static float weather_normalize_temp(float value, float range_min, float range_max)
 {
     float span = range_max - range_min;
@@ -1577,16 +1669,10 @@ static void weather_compute_3day_range(
         float mid = (max_temp + min_temp) * 0.5f;
         min_temp = mid - 0.5f;
         max_temp = mid + 0.5f;
-        span = 1.0f;
     }
 
-    float pad = span * 0.08f;
-    if (pad < 0.5f) {
-        pad = 0.5f;
-    }
-
-    *out_min = min_temp - pad;
-    *out_max = max_temp + pad;
+    *out_min = min_temp;
+    *out_max = max_temp;
 }
 
 static void weather_set_3day_rows_layout(lv_obj_t *card, w_weather_tile_ctx_t *ctx)
@@ -1658,7 +1744,7 @@ static void weather_set_3day_rows_layout(lv_obj_t *card, w_weather_tile_ctx_t *c
         lv_obj_set_size(row->low_label, low_w, row_h);
         x += low_w + gap;
 
-        lv_coord_t track_h = (row_h >= 24) ? 14 : 12;
+        lv_coord_t track_h = (row_h >= 24) ? 16 : 14;
         const lv_font_t *text_font = lv_obj_get_style_text_font(row->low_label, LV_PART_MAIN);
         if (text_font == NULL) {
             text_font = WEATHER_3DAY_META_FONT;
@@ -1759,6 +1845,12 @@ static void weather_set_3day_row_values(weather_3day_row_widgets_t *widgets, con
             fill_end = track_w;
         }
 
+        lv_color_t start_color = weather_3day_temp_color(low_temp, unit);
+        lv_color_t end_color = weather_3day_temp_color(high_temp, unit);
+        lv_obj_set_style_bg_color(widgets->bar_fill, start_color, LV_PART_MAIN);
+        lv_obj_set_style_bg_grad_color(widgets->bar_fill, end_color, LV_PART_MAIN);
+        lv_obj_set_style_bg_grad_dir(widgets->bar_fill, LV_GRAD_DIR_HOR, LV_PART_MAIN);
+
         lv_obj_set_pos(widgets->bar_fill, fill_x, 0);
         lv_obj_set_size(widgets->bar_fill, fill_end - fill_x, track_h);
         lv_obj_clear_flag(widgets->bar_fill, LV_OBJ_FLAG_HIDDEN);
@@ -1768,7 +1860,7 @@ static void weather_set_3day_row_values(weather_3day_row_widgets_t *widgets, con
 
     if (row->has_point) {
         float point_norm = weather_normalize_temp(row->point_temp, range_min, range_max);
-        lv_coord_t marker_size = track_h > 12 ? track_h : 12;
+        lv_coord_t marker_size = track_h;
         lv_coord_t marker_x = (lv_coord_t)(point_norm * (float)track_w + 0.5f) - marker_size / 2;
         if (marker_x < 0) {
             marker_x = 0;
@@ -2013,16 +2105,16 @@ static void weather_render_3day(lv_obj_t *card, w_weather_tile_ctx_t *ctx, const
         lv_obj_set_style_radius(row->bar_track, LV_RADIUS_CIRCLE, LV_PART_MAIN);
 
         lv_obj_set_style_bg_color(row->bar_fill, lv_color_hex(WEATHER_3DAY_FILL_COLD), LV_PART_MAIN);
-        lv_obj_set_style_bg_grad_color(row->bar_fill, lv_color_hex(WEATHER_3DAY_FILL_WARM), LV_PART_MAIN);
+        lv_obj_set_style_bg_grad_color(row->bar_fill, lv_color_hex(WEATHER_3DAY_FILL_HOT), LV_PART_MAIN);
         lv_obj_set_style_bg_grad_dir(row->bar_fill, LV_GRAD_DIR_HOR, LV_PART_MAIN);
         lv_obj_set_style_bg_opa(row->bar_fill, LV_OPA_COVER, LV_PART_MAIN);
         lv_obj_set_style_border_width(row->bar_fill, 0, LV_PART_MAIN);
         lv_obj_set_style_radius(row->bar_fill, LV_RADIUS_CIRCLE, LV_PART_MAIN);
 
-        lv_obj_set_style_bg_color(row->bar_marker, lv_color_hex(APP_UI_COLOR_TEXT_PRIMARY), LV_PART_MAIN);
+        lv_obj_set_style_bg_color(row->bar_marker, lv_color_hex(0xD5DEE3), LV_PART_MAIN);
         lv_obj_set_style_bg_opa(row->bar_marker, LV_OPA_COVER, LV_PART_MAIN);
         lv_obj_set_style_border_width(row->bar_marker, 2, LV_PART_MAIN);
-        lv_obj_set_style_border_color(row->bar_marker, lv_color_hex(WEATHER_3DAY_MARKER_RING), LV_PART_MAIN);
+        lv_obj_set_style_border_color(row->bar_marker, lv_color_hex(0x4E5D68), LV_PART_MAIN);
         lv_obj_set_style_radius(row->bar_marker, LV_RADIUS_CIRCLE, LV_PART_MAIN);
     }
     weather_set_3day_rows_layout(card, ctx);

@@ -53,6 +53,11 @@ static esp_err_t guarded_api_wifi_scan_get(httpd_req_t *req)
     return http_guard_handle(req, api_wifi_scan_get_handler);
 }
 
+static esp_err_t guarded_api_screenshot_bmp_get(httpd_req_t *req)
+{
+    return http_guard_handle(req, api_screenshot_bmp_get_handler);
+}
+
 esp_err_t api_routes_register(httpd_handle_t server)
 {
     if (server == NULL) {
@@ -119,6 +124,12 @@ esp_err_t api_routes_register(httpd_handle_t server)
         .handler = guarded_api_wifi_scan_get,
         .user_ctx = NULL,
     };
+    httpd_uri_t get_screenshot_bmp = {
+        .uri = "/api/screenshot.bmp",
+        .method = HTTP_GET,
+        .handler = guarded_api_screenshot_bmp_get,
+        .user_ctx = NULL,
+    };
 
     ESP_RETURN_ON_ERROR(httpd_register_uri_handler(server, &get_layout), "api_routes", "GET /api/layout");
     ESP_RETURN_ON_ERROR(httpd_register_uri_handler(server, &put_layout), "api_routes", "PUT /api/layout");
@@ -132,6 +143,8 @@ esp_err_t api_routes_register(httpd_handle_t server)
         httpd_register_uri_handler(server, &get_i18n_effective), "api_routes", "GET /api/i18n/effective");
     ESP_RETURN_ON_ERROR(httpd_register_uri_handler(server, &put_i18n_custom), "api_routes", "PUT /api/i18n/custom");
     ESP_RETURN_ON_ERROR(httpd_register_uri_handler(server, &get_wifi_scan), "api_routes", "GET /api/wifi/scan");
+    ESP_RETURN_ON_ERROR(
+        httpd_register_uri_handler(server, &get_screenshot_bmp), "api_routes", "GET /api/screenshot.bmp");
 
     return ESP_OK;
 }

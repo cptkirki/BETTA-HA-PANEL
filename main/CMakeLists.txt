@@ -11,6 +11,7 @@ idf_component_register(
         "api/api_settings.c"
         "api/api_i18n.c"
         "api/api_wifi.c"
+        "api/api_screenshot.c"
         "drivers/display_init.c"
         "drivers/touch_init.c"
         "ha/ha_client.c"
