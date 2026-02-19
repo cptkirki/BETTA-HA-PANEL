@@ -1,3 +1,4 @@
+<!-- SPDX-License-Identifier: LicenseRef-FNCL-1.0 | Copyright (c) 2026 Christopher Gleiche -->
 ## ESP-Hosted C6 Firmware Source
 
 The original C6 adapter firmware used for this release was:

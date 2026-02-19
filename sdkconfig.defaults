@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: LicenseRef-FNCL-1.0
+# Copyright (c) 2026 Christopher Gleiche
 # Core behavior defaults for development
 CONFIG_LOG_DEFAULT_LEVEL_INFO=y
 CONFIG_FREERTOS_HZ=1000

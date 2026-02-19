@@ -1,3 +1,4 @@
+<!-- SPDX-License-Identifier: LicenseRef-FNCL-1.0 | Copyright (c) 2026 Christopher Gleiche -->
 <img src="images/BETTAOS.jpg" alt="BETTA OS Logo" width="20%" />
 
 # BETTA HA Panel 

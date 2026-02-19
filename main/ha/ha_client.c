@@ -1,3 +1,6 @@
+/* SPDX-License-Identifier: LicenseRef-FNCL-1.0
+ * Copyright (c) 2026 Christopher Gleiche
+ */
 #include "ha/ha_client.h"
 
 #include <inttypes.h>

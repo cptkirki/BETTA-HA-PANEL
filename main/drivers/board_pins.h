@@ -1,3 +1,6 @@
+/* SPDX-License-Identifier: LicenseRef-FNCL-1.0
+ * Copyright (c) 2026 Christopher Gleiche
+ */
 #pragma once
 
 // Placeholder pin mapping for Waveshare ESP32-P4 Smart 86 Box.

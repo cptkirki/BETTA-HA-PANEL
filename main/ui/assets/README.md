@@ -1,3 +1,4 @@
+<!-- SPDX-License-Identifier: LicenseRef-FNCL-1.0 | Copyright (c) 2026 Christopher Gleiche -->
 # Splash House Image (Optional)
 
 You can replace the boot splash center emblem with a static image.

@@ -1,3 +1,5 @@
-﻿Weather icons source:
+﻿# SPDX-License-Identifier: LicenseRef-FNCL-1.0
+# Copyright (c) 2026 Christopher Gleiche
+Weather icons source:
 https://github.com/basmilius/weather-icons
 Please check upstream repository for license/attribution details.

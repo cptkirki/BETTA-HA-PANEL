@@ -1,3 +1,6 @@
+/* SPDX-License-Identifier: LicenseRef-FNCL-1.0
+ * Copyright (c) 2026 Christopher Gleiche
+ */
 #pragma once
 
 #define APP_NAME "betta-ha-panel"

@@ -1,3 +1,6 @@
+/* SPDX-License-Identifier: LicenseRef-FNCL-1.0
+ * Copyright (c) 2026 Christopher Gleiche
+ */
 #include "ui/theme/theme_default.h"
 
 static lv_style_t s_style_screen;

@@ -1,3 +1,4 @@
+<!-- SPDX-License-Identifier: LicenseRef-FNCL-1.0 | Copyright (c) 2026 Christopher Gleiche -->
 # MDI Icon Font Workflow (LVGL Converter)
 
 This project uses an optional generated LVGL font source:

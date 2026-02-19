@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: LicenseRef-FNCL-1.0
+# Copyright (c) 2026 Christopher Gleiche
 menu "Example Configuration"
 
 menu "Wi-Fi Station"
