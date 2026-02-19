@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: LicenseRef-FNCL-1.0
+/* SPDX-License-Identifier: LicenseRef-FNCL-1.1
  * Copyright (c) 2026 Christopher Gleiche
  */
 #include "ui/fonts/mdi_font_registry.h"
