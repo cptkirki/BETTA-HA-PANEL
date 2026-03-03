@@ -31,9 +31,9 @@ Widgets can be configured and placed (drag and drop) on the canvas:
 
 
 Configuration via webconfig in BETTA Editor:
-
-<img width="358" height="873" alt="image" src="https://github.com/user-attachments/assets/8c05cce8-983f-4715-a1fb-38ebbcbee563" />
-
+<p>
+  <img width="358" height="873" alt="image" src="https://github.com/user-attachments/assets/8c05cce8-983f-4715-a1fb-38ebbcbee563" />
+</p>
 
 available Widgets:
 
