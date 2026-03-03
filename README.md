@@ -25,10 +25,11 @@ Widgets can be configured and placed (drag and drop) on the canvas:
   <img src="images/heating%20on%20example.jpg" alt="Heating ON example" width="49%" />
 </p>
 
+Widgets can be configured and placed (drag and drop) on the canvas:
 
+<img width="1406" height="856" alt="image" src="https://github.com/user-attachments/assets/c5959f98-e151-4d9e-ac31-d636e9d65dcc" />
 
 ![alt text](https://github.com/cptkirki/BETTA-HA-PANEL/blob/main/images/weather%20forecast.jpg "3day weather forecast")
-
 
 Configuration via webconfig in BETTA Editor:
 <p>
@@ -38,8 +39,3 @@ Configuration via webconfig in BETTA Editor:
 available Widgets:
 
 <img width="319" height="130" alt="image" src="https://github.com/user-attachments/assets/1a248656-d01f-4585-a639-6d7dceafd08d" />
-
-Widgets can be configured and placed (drag and drop) on the canvas:
-
-<img width="1406" height="856" alt="image" src="https://github.com/user-attachments/assets/c5959f98-e151-4d9e-ac31-d636e9d65dcc" />
-
